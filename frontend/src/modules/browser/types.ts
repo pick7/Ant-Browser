@@ -51,7 +51,8 @@ export interface BrowserSettings {
   userDataRoot: string
   defaultFingerprintArgs: string[]
   defaultLaunchArgs: string[]
-  defaultProxy: string
+  defaultStartUrls: string[]
+  restoreLastSession: boolean
   startReadyTimeoutMs: number
   startStableWindowMs: number
 }

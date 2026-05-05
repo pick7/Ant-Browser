@@ -9,7 +9,11 @@ func TestBuildLaunchArgsAppendsDefaultVerificationURLs(t *testing.T) {
 	t.Parallel()
 
 	baseArgs := []string{"--disable-sync"}
-	got := BuildLaunchArgs(append([]string{}, baseArgs...), &Profile{})
+	got := BuildLaunchArgs(append([]string{}, baseArgs...), []string{
+		"https://ippure.com/",
+		"https://iplark.com/",
+		"https://ping0.cc/",
+	})
 	want := []string{
 		"--disable-sync",
 		"https://ippure.com/",

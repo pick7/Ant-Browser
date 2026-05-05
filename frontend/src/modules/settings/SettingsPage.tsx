@@ -1,32 +1,40 @@
 import { useEffect, useRef, useState } from 'react'
-import { Save, RotateCcw, Upload, Download } from 'lucide-react'
-import { Card, Button, FormItem, Input, Select, Switch, ThemeSwitcher, toast, Modal, Progress } from '../../shared/components'
-import { fetchSettings, saveSettings, resetSettings, initializeSystemData, exportSystemConfig, importSystemConfig } from './api'
+import { Save, RotateCcw } from 'lucide-react'
+import { Card, Button, FormItem, Input, Select, Switch, ThemeSwitcher, toast } from '../../shared/components'
+import {
+  fetchSettings,
+  saveSettings,
+  resetSettings,
+  initializeSystemData,
+  exportSystemConfig,
+  importSystemConfig,
+  fetchAutomationState,
+  saveAutomationScriptPackageSettings,
+  saveAutomationSettings,
+  saveAutomationRuntimeSettings,
+  installAutomationRuntime,
+  automationProbeSystemNode,
+  automationRuntimeSelfCheck,
+  defaultAutomationState,
+} from './api'
 import type { AppSettings } from './types'
+import type { AutomationNodeSource, AutomationRuntimeCheck, AutomationState, AutomationSystemNodeProbe } from './api'
 import { defaultSettings } from './types'
-import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
-import { useBackupStore } from '../../store/backupStore'
-
-interface BackupExportProgress {
-  phase: string
-  progress: number
-  message: string
-  componentId?: string
-  componentName?: string
-  entryIndex?: number
-  entryTotal?: number
-  timestamp?: string
-}
-
-interface BackupExportLogItem {
-  id: number
-  phase: string
-  time: string
-  text: string
-}
+import { AutomationSettingsCard } from './components/AutomationSettingsCard'
+import { BackupImportModal, BackupSettingsCard } from './components/BackupSettingsCard'
+import type { AutomationRuntimeProgress, BackupExportLogItem, BackupExportProgress } from './progress'
+import { useSettingsProgressEffects } from './hooks/useSettingsProgressEffects'
 
 export function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings)
+  const [automationState, setAutomationState] = useState<AutomationState>(defaultAutomationState)
+  const [automationProgress, setAutomationProgress] = useState<AutomationRuntimeProgress | null>(null)
+  const [automationBusy, setAutomationBusy] = useState<'none' | 'toggle' | 'probe' | 'runtime' | 'package' | 'install' | 'check'>('none')
+  const [automationCheck, setAutomationCheck] = useState<AutomationRuntimeCheck | null>(null)
+  const [automationProbe, setAutomationProbe] = useState<AutomationSystemNodeProbe | null>(null)
+  const [automationNodeSourceDraft, setAutomationNodeSourceDraft] = useState<AutomationNodeSource>('auto')
+  const [automationSystemNodePathDraft, setAutomationSystemNodePathDraft] = useState('')
+  const [automationRuntimeDirty, setAutomationRuntimeDirty] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
@@ -36,132 +44,39 @@ export function SettingsPage() {
   const [importProgress, setImportProgress] = useState<BackupExportProgress | null>(null)
   const [exportLogs, setExportLogs] = useState<BackupExportLogItem[]>([])
   const exportLogsRef = useRef<HTMLDivElement | null>(null)
-  const setImportState = useBackupStore((s) => s.setImportState)
-  const clearImportState = useBackupStore((s) => s.clearImportState)
 
   useEffect(() => {
     loadSettings()
   }, [])
 
-  useEffect(() => {
-    const onExportProgress = (payload: BackupExportProgress) => {
-      if (!payload || typeof payload !== 'object') {
-        return
-      }
-      const phase = typeof payload.phase === 'string' ? payload.phase : 'writing'
-      if (phase === 'cancelled') {
-        setExportProgress(null)
-        setExportLogs([])
-        return
-      }
-      const progress = Number.isFinite(payload.progress) ? Math.max(0, Math.min(100, Math.round(payload.progress))) : 0
-      const message = typeof payload.message === 'string' && payload.message.trim() ? payload.message.trim() : '正在导出...'
-      const componentId = typeof payload.componentId === 'string' ? payload.componentId.trim() : ''
-      const componentName = typeof payload.componentName === 'string' ? payload.componentName.trim() : ''
-      const entryIndex = Number.isFinite(payload.entryIndex) ? Math.max(0, Math.round(payload.entryIndex || 0)) : 0
-      const entryTotal = Number.isFinite(payload.entryTotal) ? Math.max(0, Math.round(payload.entryTotal || 0)) : 0
-      const timestamp = typeof payload.timestamp === 'string' && payload.timestamp.trim()
-        ? payload.timestamp.trim()
-        : new Date().toLocaleTimeString('zh-CN', { hour12: false })
-
-      setExportProgress({
-        phase,
-        progress,
-        message,
-        componentId: componentId || undefined,
-        componentName: componentName || undefined,
-        entryIndex: entryIndex || undefined,
-        entryTotal: entryTotal || undefined,
-        timestamp,
-      })
-
-      const prefix = componentName ? `[${componentName}] ` : componentId ? `[${componentId}] ` : ''
-      const text = `${prefix}${message}`
-      setExportLogs(prev => {
-        const last = prev[prev.length - 1]
-        if (last && last.text === text && last.phase === phase) {
-          return prev
-        }
-        const next = [...prev, { id: Date.now() + Math.floor(Math.random() * 1000), phase, time: timestamp, text }]
-        return next.length > 120 ? next.slice(next.length - 120) : next
-      })
-    }
-
-    EventsOn('backup:export:progress', onExportProgress)
-    return () => {
-      EventsOff('backup:export:progress')
-    }
-  }, [])
+  useSettingsProgressEffects({
+    actionLoading,
+    exportLogs,
+    exportLogsRef,
+    importProgress,
+    setAutomationProgress,
+    setAutomationState,
+    setExportLogs,
+    setExportProgress,
+    setImportProgress,
+  })
 
   useEffect(() => {
-    const onImportProgress = (payload: BackupExportProgress) => {
-      if (!payload || typeof payload !== 'object') {
-        return
-      }
-      const phase = typeof payload.phase === 'string' ? payload.phase : 'importing'
-      if (phase === 'cancelled') {
-        setImportProgress(null)
-        return
-      }
-      const progress = Number.isFinite(payload.progress) ? Math.max(0, Math.min(100, Math.round(payload.progress))) : 0
-      const message = typeof payload.message === 'string' && payload.message.trim() ? payload.message.trim() : '正在加载配置...'
-      const componentId = typeof payload.componentId === 'string' ? payload.componentId.trim() : ''
-      const componentName = typeof payload.componentName === 'string' ? payload.componentName.trim() : ''
-      const entryIndex = Number.isFinite(payload.entryIndex) ? Math.max(0, Math.round(payload.entryIndex || 0)) : 0
-      const entryTotal = Number.isFinite(payload.entryTotal) ? Math.max(0, Math.round(payload.entryTotal || 0)) : 0
-      const timestamp = typeof payload.timestamp === 'string' && payload.timestamp.trim()
-        ? payload.timestamp.trim()
-        : new Date().toLocaleTimeString('zh-CN', { hour12: false })
-
-      setImportProgress({
-        phase,
-        progress,
-        message,
-        componentId: componentId || undefined,
-        componentName: componentName || undefined,
-        entryIndex: entryIndex || undefined,
-        entryTotal: entryTotal || undefined,
-        timestamp,
-      })
-    }
-
-    EventsOn('backup:import:progress', onImportProgress)
-    return () => {
-      EventsOff('backup:import:progress')
-    }
-  }, [])
-
-  useEffect(() => {
-    const isImporting = actionLoading === 'import-reset' || actionLoading === 'import-merge'
-    if (isImporting) {
-      setImportState({
-        inProgress: true,
-        progress: importProgress?.progress ?? 0,
-        message: importProgress?.message || '正在加载配置...',
-      })
-      return
-    }
-    clearImportState()
-  }, [actionLoading, importProgress?.progress, importProgress?.message, setImportState, clearImportState])
-
-  useEffect(() => {
-    return () => {
-      clearImportState()
-    }
-  }, [clearImportState])
-
-  useEffect(() => {
-    if (!exportLogsRef.current) {
-      return
-    }
-    exportLogsRef.current.scrollTop = exportLogsRef.current.scrollHeight
-  }, [exportLogs])
+    setAutomationNodeSourceDraft((automationState.settings.nodeSource || 'auto') as AutomationNodeSource)
+    setAutomationSystemNodePathDraft(automationState.settings.systemNodePath || '')
+    setAutomationProbe(null)
+    setAutomationRuntimeDirty(false)
+  }, [automationState.settings.nodeSource, automationState.settings.systemNodePath])
 
   const loadSettings = async () => {
     setLoading(true)
     try {
-      const data = await fetchSettings()
+      const [data, automation] = await Promise.all([
+        fetchSettings(),
+        fetchAutomationState(),
+      ])
       setSettings(data)
+      setAutomationState(automation)
     } finally {
       setLoading(false)
     }
@@ -192,6 +107,136 @@ export function SettingsPage() {
       const data = await resetSettings()
       setSettings(data)
       setHasChanges(false)
+    }
+  }
+
+  const handleAutomationEnabledChange = async (enabled: boolean) => {
+    setAutomationBusy('toggle')
+    setAutomationCheck(null)
+    try {
+      const next = await saveAutomationSettings(enabled, automationState.settings.headlessDefault)
+      setAutomationState(next)
+      if (!enabled) {
+        setAutomationProgress(null)
+        toast.success('自动化支持已关闭')
+        return
+      }
+      if (!next.status.ready) {
+        setAutomationProgress({
+          phase: 'checking',
+          progress: 0,
+          message: '已开启自动化支持，正在准备运行时...',
+        })
+        toast.success('自动化支持已开启，正在准备运行时')
+        return
+      }
+      toast.success('自动化支持已开启')
+    } catch (error: any) {
+      toast.error(error?.message || '自动化配置保存失败')
+    } finally {
+      setAutomationBusy('none')
+    }
+  }
+
+  const handleAutomationHeadlessChange = async (headlessDefault: boolean) => {
+    setAutomationBusy('toggle')
+    try {
+      const next = await saveAutomationSettings(automationState.settings.enabled, headlessDefault)
+      setAutomationState(next)
+      toast.success(headlessDefault ? '默认无头模式已开启' : '默认无头模式已关闭')
+    } catch (error: any) {
+      toast.error(error?.message || '自动化配置保存失败')
+    } finally {
+      setAutomationBusy('none')
+    }
+  }
+
+  const handleAutomationRuntimeSettingsSave = async () => {
+    setAutomationBusy('runtime')
+    setAutomationCheck(null)
+    try {
+      const next = await saveAutomationRuntimeSettings(automationNodeSourceDraft, automationSystemNodePathDraft)
+      setAutomationState(next)
+      setAutomationRuntimeDirty(false)
+
+      if (next.settings.enabled && next.status.installing) {
+        setAutomationProgress({
+          phase: 'checking',
+          progress: 0,
+          message: '运行时策略已保存，正在重新检查自动化运行时...',
+        })
+        toast.success('运行时策略已保存，正在重新检查')
+        return
+      }
+
+      toast.success('运行时策略已保存')
+    } catch (error: any) {
+      toast.error(error?.message || '运行时策略保存失败')
+    } finally {
+      setAutomationBusy('none')
+    }
+  }
+
+  const handleAutomationTypeScriptBuildChange = async (allowTypeScriptBuild: boolean) => {
+    setAutomationBusy('package')
+    try {
+      const next = await saveAutomationScriptPackageSettings(allowTypeScriptBuild)
+      setAutomationState(next)
+      toast.success(allowTypeScriptBuild ? 'TypeScript 导入构建已开启' : 'TypeScript 导入构建已关闭')
+    } catch (error: any) {
+      toast.error(error?.message || '脚本包配置保存失败')
+    } finally {
+      setAutomationBusy('none')
+    }
+  }
+
+  const handleAutomationProbeSystemNode = async () => {
+    setAutomationBusy('probe')
+    try {
+      const result = await automationProbeSystemNode(automationSystemNodePathDraft)
+      setAutomationProbe(result)
+      toast.success(`系统 Node 可用：${result.version}`)
+    } catch (error: any) {
+      setAutomationProbe(null)
+      toast.error(error?.message || '系统 Node 检测失败')
+    } finally {
+      setAutomationBusy('none')
+    }
+  }
+
+  const handleAutomationInstall = async () => {
+    setAutomationBusy('install')
+    try {
+      const next = await installAutomationRuntime()
+      setAutomationState(next)
+      setAutomationProgress({
+        phase: 'checking',
+        progress: 0,
+        message: '正在准备自动化运行时...',
+      })
+      toast.success('已开始准备自动化运行时')
+    } catch (error: any) {
+      toast.error(error?.message || '启动自动化运行时安装失败')
+    } finally {
+      setAutomationBusy('none')
+    }
+  }
+
+  const handleAutomationSelfCheck = async () => {
+    setAutomationBusy('check')
+    try {
+      const result = await automationRuntimeSelfCheck()
+      setAutomationCheck(result)
+      if (result.ok) {
+        toast.success(`自检通过：Node ${result.nodeVersion} / playwright-core ${result.playwrightVersion}`)
+      } else {
+        toast.warning('自检未通过')
+      }
+    } catch (error: any) {
+      setAutomationCheck(null)
+      toast.error(error?.message || '自动化运行时自检失败')
+    } finally {
+      setAutomationBusy('none')
     }
   }
 
@@ -298,8 +343,6 @@ export function SettingsPage() {
       setActionLoading('none')
     }
   }
-
-  const importRunning = actionLoading === 'import-reset' || actionLoading === 'import-merge'
 
   if (loading) {
     return (
@@ -423,6 +466,34 @@ export function SettingsPage() {
         </div>
       </Card>
 
+      <AutomationSettingsCard
+        automationState={automationState}
+        automationProgress={automationProgress}
+        automationBusy={automationBusy}
+        automationCheck={automationCheck}
+        automationProbe={automationProbe}
+        automationNodeSourceDraft={automationNodeSourceDraft}
+        automationSystemNodePathDraft={automationSystemNodePathDraft}
+        automationRuntimeDirty={automationRuntimeDirty}
+        onEnabledChange={handleAutomationEnabledChange}
+        onHeadlessChange={handleAutomationHeadlessChange}
+        onNodeSourceDraftChange={(value) => {
+          setAutomationNodeSourceDraft(value)
+          setAutomationProbe(null)
+          setAutomationRuntimeDirty(true)
+        }}
+        onSystemNodePathDraftChange={(value) => {
+          setAutomationSystemNodePathDraft(value)
+          setAutomationProbe(null)
+          setAutomationRuntimeDirty(true)
+        }}
+        onTypeScriptBuildChange={handleAutomationTypeScriptBuildChange}
+        onProbeSystemNode={() => { void handleAutomationProbeSystemNode() }}
+        onSaveRuntimeSettings={() => { void handleAutomationRuntimeSettingsSave() }}
+        onInstall={() => { void handleAutomationInstall() }}
+        onSelfCheck={() => { void handleAutomationSelfCheck() }}
+      />
+
       {/* 高级设置 */}
       <Card title="高级设置" subtitle="高级配置选项">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -459,170 +530,29 @@ export function SettingsPage() {
         </div>
       </Card>
 
-      <Card title="配置备份与恢复" subtitle="初始化、导出、加载全量配置与浏览器数据">
-        <div className="space-y-3">
-          <p className="text-xs text-[var(--color-text-muted)]">
-            加载配置时可选择先初始化后全量恢复，或在现有数据上按规则判重合并。
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={handleInitializeSystem}
-              loading={actionLoading === 'init'}
-            >
-              <RotateCcw className="w-4 h-4" />
-              初始化系统
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleExportSystem}
-              loading={actionLoading === 'export'}
-            >
-              <Download className="w-4 h-4" />
-              导出配置
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => {
-                setImportProgress(null)
-                setImportModalOpen(true)
-              }}
-            >
-              <Upload className="w-4 h-4" />
-              加载配置
-            </Button>
-          </div>
-          {exportProgress && (
-            <div className="rounded-md border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] px-3 py-2 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-[var(--color-text-secondary)]">{exportProgress.message}</span>
-                {exportProgress.phase === 'error' && <span className="text-[var(--color-error)]">失败</span>}
-                {exportProgress.phase === 'done' && <span className="text-[var(--color-success)]">完成</span>}
-                {exportProgress.phase !== 'done' && exportProgress.phase !== 'error' && (
-                  <span className="text-[var(--color-text-muted)]">处理中</span>
-                )}
-              </div>
-              <div className="text-xs text-[var(--color-text-muted)]">
-                当前组件：
-                {' '}
-                {exportProgress.componentName || exportProgress.componentId || '准备中'}
-                {exportProgress.entryIndex && exportProgress.entryTotal
-                  ? `（${exportProgress.entryIndex}/${exportProgress.entryTotal}）`
-                  : ''}
-              </div>
-              <Progress
-                percent={exportProgress.progress}
-                size="sm"
-                status={exportProgress.phase === 'error' ? 'error' : exportProgress.phase === 'done' ? 'success' : 'normal'}
-              />
-              <div className="rounded border border-[var(--color-border-muted)] bg-[var(--color-bg-primary)] px-2 py-2">
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="text-[var(--color-text-secondary)]">导出日志</span>
-                  <span className="text-[var(--color-text-muted)]">{exportLogs.length} 条</span>
-                </div>
-                <div ref={exportLogsRef} className="max-h-36 overflow-y-auto pr-1 space-y-1">
-                  {exportLogs.length === 0 && (
-                    <p className="text-xs text-[var(--color-text-muted)]">等待导出日志...</p>
-                  )}
-                  {exportLogs.map(item => (
-                    <div key={item.id} className="text-xs leading-5 font-mono">
-                      <span className="text-[var(--color-text-muted)] mr-2">{item.time}</span>
-                      <span className={item.phase === 'error' ? 'text-[var(--color-error)]' : item.phase === 'done' ? 'text-[var(--color-success)]' : 'text-[var(--color-text-secondary)]'}>
-                        {item.text}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </Card>
+      <BackupSettingsCard
+        actionLoading={actionLoading}
+        exportProgress={exportProgress}
+        exportLogs={exportLogs}
+        exportLogsRef={exportLogsRef}
+        onInitialize={() => { void handleInitializeSystem() }}
+        onExport={() => { void handleExportSystem() }}
+        onOpenImport={() => {
+          setImportProgress(null)
+          setImportModalOpen(true)
+        }}
+      />
 
-      <Modal
+      <BackupImportModal
         open={importModalOpen}
+        actionLoading={actionLoading}
+        importProgress={importProgress}
         onClose={() => {
-          if (actionLoading !== 'none') {
-            return
-          }
           setImportModalOpen(false)
           setImportProgress(null)
         }}
-        title="加载配置"
-        width="520px"
-        closable={!importRunning}
-        footer={
-          <>
-            {!importRunning && (
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setImportModalOpen(false)
-                  setImportProgress(null)
-                }}
-              >
-                取消
-              </Button>
-            )}
-            <Button
-              variant="danger"
-              onClick={() => handleImportSystem(true)}
-              loading={actionLoading === 'import-reset'}
-              disabled={actionLoading !== 'none' && actionLoading !== 'import-reset'}
-            >
-              是，先初始化后加载
-            </Button>
-            <Button
-              onClick={() => handleImportSystem(false)}
-              loading={actionLoading === 'import-merge'}
-              disabled={actionLoading !== 'none' && actionLoading !== 'import-merge'}
-            >
-              否，直接加载并判重
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-3 text-sm text-[var(--color-text-secondary)]">
-          <p>是否先执行初始化再加载 ZIP 配置？</p>
-          <p className="text-xs text-[var(--color-text-muted)]">
-            选择“是”会先清空当前数据，再全量恢复；选择“否”会在现有数据上做判重合并。
-          </p>
-          {importProgress && (
-            <div className="rounded-md border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] px-3 py-2 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-[var(--color-text-secondary)]">{importProgress.message}</span>
-                {importProgress.phase === 'error' && <span className="text-[var(--color-error)]">失败</span>}
-                {importProgress.phase === 'done' && <span className="text-[var(--color-success)]">完成</span>}
-                {importProgress.phase !== 'done' && importProgress.phase !== 'error' && (
-                  <span className="text-[var(--color-text-muted)]">加载中</span>
-                )}
-              </div>
-              <Progress
-                percent={importProgress.progress}
-                size="sm"
-                status={importProgress.phase === 'error' ? 'error' : importProgress.phase === 'done' ? 'success' : 'normal'}
-              />
-              {(importProgress.componentName || importProgress.componentId) && (
-                <div className="text-xs text-[var(--color-text-muted)]">
-                  当前组件：
-                  {' '}
-                  {importProgress.componentName || importProgress.componentId}
-                  {importProgress.entryIndex && importProgress.entryTotal
-                    ? `（${importProgress.entryIndex}/${importProgress.entryTotal}）`
-                    : ''}
-                </div>
-              )}
-            </div>
-          )}
-          {importRunning && (
-            <p className="text-xs text-[var(--color-warning)]">
-              当前正在加载配置，弹窗不可关闭。若需中断，请直接关闭应用。
-            </p>
-          )}
-        </div>
-      </Modal>
+        onImport={(resetFirst) => { void handleImportSystem(resetFirst) }}
+      />
 
     </div>
   )

@@ -64,7 +64,8 @@ type Settings struct {
 	UserDataRoot           string   `json:"userDataRoot"`
 	DefaultFingerprintArgs []string `json:"defaultFingerprintArgs"`
 	DefaultLaunchArgs      []string `json:"defaultLaunchArgs"`
-	DefaultProxy           string   `json:"defaultProxy"`
+	DefaultStartURLs       []string `json:"defaultStartUrls"`
+	RestoreLastSession     bool     `json:"restoreLastSession"`
 	StartReadyTimeoutMs    int      `json:"startReadyTimeoutMs"`
 	StartStableWindowMs    int      `json:"startStableWindowMs"`
 }

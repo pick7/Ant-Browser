@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { CheckCircle, Edit2, Plus, Star, Trash2, XCircle } from 'lucide-react'
-import { Button, Card, FormItem, Input, Modal, Table, Textarea, toast } from '../../../shared/components'
+import { Button, Card, FormItem, Input, Modal, Switch, Table, Textarea, toast } from '../../../shared/components'
 import type { TableColumn } from '../../../shared/components/Table'
 import type { BrowserCore, BrowserCoreInput, BrowserSettings } from '../types'
 import {
@@ -23,6 +23,7 @@ export function BrowserSettingsModal({ open, onClose, settings: initSettings, co
   const [settings, setSettings] = useState<BrowserSettings>(initSettings)
   const [fingerprintText, setFingerprintText] = useState((initSettings.defaultFingerprintArgs || []).join('\n'))
   const [launchText, setLaunchText] = useState((initSettings.defaultLaunchArgs || []).join('\n'))
+  const [startUrlsText, setStartUrlsText] = useState((initSettings.defaultStartUrls || []).join('\n'))
   const [saving, setSaving] = useState(false)
 
   // 内核编辑弹窗
@@ -38,6 +39,7 @@ export function BrowserSettingsModal({ open, onClose, settings: initSettings, co
         ...settings,
         defaultFingerprintArgs: fingerprintText.split('\n').map(s => s.trim()).filter(Boolean),
         defaultLaunchArgs: launchText.split('\n').map(s => s.trim()).filter(Boolean),
+        defaultStartUrls: startUrlsText.split('\n').map(s => s.trim()).filter(Boolean),
       })
       toast.success('配置已保存')
       onClose()
@@ -129,8 +131,17 @@ export function BrowserSettingsModal({ open, onClose, settings: initSettings, co
           <FormItem label="默认启动参数（每行一个）">
             <Textarea value={launchText} onChange={e => setLaunchText(e.target.value)} rows={3} placeholder="--disable-sync" />
           </FormItem>
-          <FormItem label="默认代理">
-            <Input value={settings.defaultProxy} onChange={e => setSettings(p => ({ ...p, defaultProxy: e.target.value }))} placeholder="http://127.0.0.1:7890" />
+          <FormItem label="默认启动页面（每行一个 URL）">
+            <Textarea value={startUrlsText} onChange={e => setStartUrlsText(e.target.value)} rows={4} placeholder="https://ippure.com/" />
+          </FormItem>
+          <FormItem label="恢复上次关闭的标签页" hint="关闭后只打开上面配置的默认页面或空白页">
+            <div className="flex items-center justify-between rounded-lg border border-[var(--color-border-default)] px-3 py-2">
+              <div>
+                <p className="text-sm text-[var(--color-text-primary)]">允许恢复旧 tab</p>
+                <p className="text-xs text-[var(--color-text-muted)] mt-1">开启后，下次启动会继续恢复之前浏览过的页面。</p>
+              </div>
+              <Switch checked={settings.restoreLastSession} onChange={checked => setSettings(prev => ({ ...prev, restoreLastSession: checked }))} />
+            </div>
           </FormItem>
         </div>
       </Modal>

@@ -33,6 +33,47 @@ func TestEnsureNewWindowLaunchArgAddsFlagOnce(t *testing.T) {
 	}
 }
 
+func TestShouldPreferVisibleWindowForStartWithParams(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		startURLs []string
+		want      bool
+	}{
+		{
+			name:      "nil start URLs",
+			startURLs: nil,
+			want:      false,
+		},
+		{
+			name:      "empty start URLs",
+			startURLs: []string{},
+			want:      false,
+		},
+		{
+			name:      "blank start URLs",
+			startURLs: []string{"  ", "\t"},
+			want:      false,
+		},
+		{
+			name:      "valid start URL",
+			startURLs: []string{"https://finance.sina.com.cn"},
+			want:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := shouldPreferVisibleWindowForStartWithParams(tt.startURLs); got != tt.want {
+				t.Fatalf("shouldPreferVisibleWindowForStartWithParams() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestIsBrowserProfileLive(t *testing.T) {
 	t.Parallel()
 
@@ -417,6 +458,36 @@ func TestSanitizeManagedLaunchArgsKeepsUnmanagedFlags(t *testing.T) {
 	}
 	if len(removed) != 0 {
 		t.Fatalf("sanitizeManagedLaunchArgs should not report managed args, got=%v", removed)
+	}
+}
+
+func TestAppendLaunchTargetsUsesConfiguredDefaultStartURLs(t *testing.T) {
+	t.Parallel()
+
+	got := appendLaunchTargets([]string{"--disable-sync"}, nil, []string{"https://one.example/", "https://two.example/"}, false, false)
+	want := []string{"--disable-sync", "https://one.example/", "https://two.example/"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("appendLaunchTargets mismatch: got=%v want=%v", got, want)
+	}
+}
+
+func TestAppendLaunchTargetsUsesBlankPageWhenSessionRestoreDisabled(t *testing.T) {
+	t.Parallel()
+
+	got := appendLaunchTargets([]string{"--disable-sync"}, nil, []string{}, false, false)
+	want := []string{"--disable-sync", "about:blank"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("appendLaunchTargets should fall back to about:blank: got=%v want=%v", got, want)
+	}
+}
+
+func TestAppendLaunchTargetsPreservesSessionRestoreWhenEnabled(t *testing.T) {
+	t.Parallel()
+
+	got := appendLaunchTargets([]string{"--disable-sync"}, nil, []string{}, false, true)
+	want := []string{"--disable-sync"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("appendLaunchTargets should preserve session restore behavior: got=%v want=%v", got, want)
 	}
 }
 

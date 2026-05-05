@@ -31,7 +31,6 @@ func TestSaveBrowserSettingsPreservesExistingStartTimingWhenOmitted(t *testing.T
 		UserDataRoot:           app.config.Browser.UserDataRoot,
 		DefaultFingerprintArgs: append([]string{}, app.config.Browser.DefaultFingerprintArgs...),
 		DefaultLaunchArgs:      append([]string{}, app.config.Browser.DefaultLaunchArgs...),
-		DefaultProxy:           app.config.Browser.DefaultProxy,
 	}); err != nil {
 		t.Fatalf("SaveBrowserSettings returned error: %v", err)
 	}
@@ -41,6 +40,9 @@ func TestSaveBrowserSettingsPreservesExistingStartTimingWhenOmitted(t *testing.T
 	}
 	if app.config.Browser.StartStableWindowMs != 2400 {
 		t.Fatalf("expected stable window to be preserved, got %d", app.config.Browser.StartStableWindowMs)
+	}
+	if len(app.config.Browser.DefaultStartURLs) != len(config.DefaultBrowserStartURLs()) {
+		t.Fatalf("expected default start urls to be preserved, got %v", app.config.Browser.DefaultStartURLs)
 	}
 }
 
@@ -52,7 +54,8 @@ func TestSaveBrowserSettingsAppliesExplicitStartTiming(t *testing.T) {
 		UserDataRoot:           app.config.Browser.UserDataRoot,
 		DefaultFingerprintArgs: append([]string{}, app.config.Browser.DefaultFingerprintArgs...),
 		DefaultLaunchArgs:      append([]string{}, app.config.Browser.DefaultLaunchArgs...),
-		DefaultProxy:           app.config.Browser.DefaultProxy,
+		DefaultStartURLs:       []string{},
+		RestoreLastSession:     true,
 		StartReadyTimeoutMs:    18000,
 		StartStableWindowMs:    3000,
 	}); err != nil {
@@ -64,5 +67,11 @@ func TestSaveBrowserSettingsAppliesExplicitStartTiming(t *testing.T) {
 	}
 	if app.config.Browser.StartStableWindowMs != 3000 {
 		t.Fatalf("expected stable window 3000ms, got %d", app.config.Browser.StartStableWindowMs)
+	}
+	if len(app.config.Browser.DefaultStartURLs) != 0 {
+		t.Fatalf("expected default start urls to be cleared, got %v", app.config.Browser.DefaultStartURLs)
+	}
+	if !app.config.Browser.RestoreLastSession {
+		t.Fatal("expected restore last session to be enabled")
 	}
 }

@@ -44,10 +44,19 @@ browser:
   default_launch_args:
     - --disable-sync
     - --no-first-run
-  default_proxy: ""
   default_bookmarks: []
   cores: []
   proxies: []
   profiles: []
 launch_server:
   port: 19876
+automation:
+  enabled: false
+  install_policy: on_demand
+  runtime_version: node-22.15.1-playwright-core-1.59.0
+  headless_default: false
+  keep_runtime_on_disable: true
+  node_source: auto
+  system_node_path: ""
+  node_version: 22.15.1
+  playwright_core_version: 1.59.0

@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Activity, CheckCircle, ChevronDown, ChevronRight, ChevronUp, Copy, Edit2, ExternalLink, FileText, Key, Pencil, Play, Plus, RefreshCw, RotateCcw, Settings, Sliders, Square, Star, Trash2, XCircle, Gift, LayoutGrid, List } from 'lucide-react'
-import { Badge, Button, Card, FormItem, Input, Modal, StatCard, Table, Textarea, toast } from '../../../shared/components'
+import { toast } from '../../../shared/components'
 import { fetchDashboardStats, redeemCDKey, redeemGithubStar, reloadConfig } from '../../dashboard/api'
-import type { TableColumn } from '../../../shared/components/Table'
 import type { BrowserCore, BrowserCoreInput, BrowserProfile, BrowserProxy, BrowserSettings, BrowserGroupWithCount } from '../types'
-import { InstanceFilterBar, EMPTY_FILTERS } from '../components/InstanceFilterBar'
+import { BrowserCoreEditorModal, BrowserListHeader, BrowserListSettingsModal, type BrowserViewMode } from '../components/BrowserListLayout'
+import { BatchToolbar } from '../components/BrowserListWidgets'
+import { BrowserProfilesPanel } from '../components/BrowserProfilesPanel'
+import { EMPTY_FILTERS } from '../components/InstanceFilterBar'
 import type { InstanceFilters } from '../components/InstanceFilterBar'
-import { KeywordsModal } from '../components/KeywordsModal'
 import { EventsOn, BrowserOpenURL } from '../../../wailsjs/runtime/runtime'
 import { PROJECT_GITHUB_URL } from '../../../config/links'
 import { resolveActionErrorMessage, resolveActionFeedback } from '../utils/actionErrors'
+import { BrowserListDialogs } from './browserList/BrowserListDialogs'
 import {
   copyBrowserProfile,
   deleteBrowserCore,
@@ -20,58 +20,15 @@ import {
   fetchBrowserProxies,
   fetchBrowserSettings,
   fetchGroups,
-  regenerateBrowserProfileCode,
   restartBrowserInstance,
   saveBrowserCore,
   saveBrowserSettings,
-  setBrowserProfileCode,
   setDefaultBrowserCore,
   startBrowserInstance,
   stopBrowserInstance,
   validateBrowserCorePath,
   validateProxyConfig,
 } from '../api'
-
-// 批量操作工具栏
-function BatchToolbar({
-  selectedCount,
-  totalCount,
-  onSelectAll,
-  onDeselectAll,
-  onBatchStart,
-  onBatchStop,
-  onBatchDelete,
-  batchLoading,
-}: {
-  selectedCount: number
-  totalCount: number
-  onSelectAll: () => void
-  onDeselectAll: () => void
-  onBatchStart: () => void
-  onBatchStop: () => void
-  onBatchDelete: () => void
-  batchLoading: boolean
-}) {
-  if (selectedCount === 0) return null
-  return (
-    <div className="flex items-center gap-3 px-4 py-2.5 bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/20 rounded-lg">
-      <span className="text-sm font-medium text-[var(--color-accent)]">已选 {selectedCount} / {totalCount}</span>
-      <div className="flex gap-1.5 ml-auto">
-        <Button size="sm" variant="ghost" onClick={onSelectAll}>全选</Button>
-        <Button size="sm" variant="ghost" onClick={onDeselectAll}>取消</Button>
-        <Button size="sm" onClick={onBatchStart} loading={batchLoading} title="批量启动">
-          <Play className="w-3.5 h-3.5" />启动
-        </Button>
-        <Button size="sm" variant="secondary" onClick={onBatchStop} loading={batchLoading} title="批量停止">
-          <Square className="w-3.5 h-3.5" />停止
-        </Button>
-        <Button size="sm" variant="ghost" onClick={onBatchDelete} title="批量删除" className="text-red-500 hover:text-red-600">
-          <Trash2 className="w-3.5 h-3.5" />删除
-        </Button>
-      </div>
-    </div>
-  )
-}
 
 const resolveProfileStatus = (running: boolean, debugReady: boolean, starting: boolean, stopping: boolean) => {
   if (starting) {
@@ -88,120 +45,6 @@ const resolveProfileStatus = (running: boolean, debugReady: boolean, starting: b
   }
   return { variant: 'warning' as const, label: '已停止' }
 }
-const formatTime = (value?: string) => {
-  if (!value) return '-'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('zh-CN')
-}
-
-function LaunchCodeCell({ profileId, code, onRefresh }: { profileId: string; code: string; onRefresh: () => void }) {
-  const [loading, setLoading] = useState(false)
-
-  const handleCopy = () => {
-    if (!code) return
-    navigator.clipboard.writeText(code).then(() => toast.success('已复制快捷码'))
-  }
-
-  const handleRegenerate = async () => {
-    setLoading(true)
-    try {
-      await regenerateBrowserProfileCode(profileId)
-      onRefresh()
-      toast.success('快捷码已重新生成')
-    } catch {
-      toast.error('重新生成失败')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleCustomCode = async () => {
-    const next = prompt('请输入自定义 Code（4-32位，仅支持字母/数字/_/-）', code || '')
-    if (next == null) return
-    const value = next.trim()
-    if (!value) {
-      toast.error('Code 不能为空')
-      return
-    }
-    setLoading(true)
-    try {
-      const applied = await setBrowserProfileCode(profileId, value)
-      onRefresh()
-      toast.success(`Code 已更新为 ${applied}`)
-    } catch (error: any) {
-      toast.error(error?.message || '设置自定义 Code 失败')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (!code) return <span className="text-[var(--color-text-muted)] text-xs">-</span>
-
-  return (
-    <div className="flex items-center gap-1">
-      <code className="text-xs font-mono bg-[var(--color-bg-secondary)] px-1.5 py-0.5 rounded text-[var(--color-accent)]">{code}</code>
-      <button onClick={handleCopy} className="p-0.5 hover:text-[var(--color-accent)] text-[var(--color-text-muted)] transition-colors" title="复制">
-        <Copy className="w-3 h-3" />
-      </button>
-      <button onClick={handleRegenerate} disabled={loading} className="p-0.5 hover:text-[var(--color-accent)] text-[var(--color-text-muted)] transition-colors disabled:opacity-50" title="重新生成">
-        <RefreshCw className="w-3 h-3" />
-      </button>
-      <button onClick={handleCustomCode} disabled={loading} className="p-0.5 hover:text-[var(--color-accent)] text-[var(--color-text-muted)] transition-colors disabled:opacity-50" title="自定义">
-        <Pencil className="w-3 h-3" />
-      </button>
-    </div>
-  )
-}
-
-function KeywordInlineRow({ keywords }: { keywords: string[] }) {
-  const [expanded, setExpanded] = useState(false)
-  const cRef = (useMemo(() => ({ current: null as HTMLDivElement | null }), []) as unknown) as React.MutableRefObject<HTMLDivElement | null>
-  const [isOverflowing, setIsOverflowing] = useState(false)
-
-  useEffect(() => {
-    if (cRef.current) {
-      setIsOverflowing(cRef.current.scrollHeight > 36)
-    }
-  }, [keywords])
-
-  if (!keywords?.length) {
-    return <span className="text-xs text-[var(--color-text-muted)] italic">暂无关键字</span>
-  }
-
-  return (
-    <div className="flex items-start gap-4 w-full">
-      <div
-        ref={cRef}
-        className={`flex flex-wrap gap-2 flex-1 transition-all duration-300 ${expanded ? '' : 'overflow-hidden max-h-[32px]'}`}
-      >
-        {keywords.map((kw, i) => (
-          <span
-            key={i}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs
-              bg-[var(--color-bg-surface)] border border-[var(--color-border-default)]
-              text-[var(--color-text-secondary)] max-w-[200px]"
-            title={kw}
-          >
-            <span className="text-[var(--color-text-muted)] font-mono shrink-0">{i + 1}.</span>
-            <span className="truncate">{kw}</span>
-          </span>
-        ))}
-      </div>
-      {isOverflowing && (
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="shrink-0 flex items-center gap-1 text-xs font-medium text-[var(--color-accent)] hover:text-indigo-400 mt-1 focus:outline-none"
-        >
-          {expanded ? (
-            <>收回 <ChevronUp className="w-3.5 h-3.5" /></>
-          ) : (
-            <>展开详情 <ChevronDown className="w-3.5 h-3.5" /></>
-          )}
-        </button>
-      )}
-    </div>
-  )
-}
 
 export function BrowserListPage() {
   const [profiles, setProfiles] = useState<BrowserProfile[]>([])
@@ -210,8 +53,8 @@ export function BrowserListPage() {
   const [groups, setGroups] = useState<BrowserGroupWithCount[]>([])
 
   // 视图模式
-  const [viewMode, setViewMode] = useState<'card' | 'table'>(() => {
-    return (localStorage.getItem('browser:viewMode') as 'card' | 'table') || 'table'
+  const [viewMode, setViewMode] = useState<BrowserViewMode>(() => {
+    return (localStorage.getItem('browser:viewMode') as BrowserViewMode) || 'table'
   })
 
   // 勾选状态
@@ -283,12 +126,14 @@ export function BrowserListPage() {
     userDataRoot: 'data',
     defaultFingerprintArgs: [],
     defaultLaunchArgs: [],
-    defaultProxy: '',
+    defaultStartUrls: [],
+    restoreLastSession: false,
     startReadyTimeoutMs: 3000,
     startStableWindowMs: 1200,
   })
   const [fingerprintText, setFingerprintText] = useState('')
   const [launchText, setLaunchText] = useState('')
+  const [startUrlsText, setStartUrlsText] = useState('')
   const [savingSettings, setSavingSettings] = useState(false)
 
   // 内核管理
@@ -387,6 +232,7 @@ export function BrowserListPage() {
     setSettings(data)
     setFingerprintText((data.defaultFingerprintArgs || []).join('\n'))
     setLaunchText((data.defaultLaunchArgs || []).join('\n'))
+    setStartUrlsText((data.defaultStartUrls || []).join('\n'))
   }
 
   const loadCores = async () => {
@@ -743,6 +589,7 @@ export function BrowserListPage() {
         ...settings,
         defaultFingerprintArgs: fingerprintText.split('\n').map(s => s.trim()).filter(Boolean),
         defaultLaunchArgs: launchText.split('\n').map(s => s.trim()).filter(Boolean),
+        defaultStartUrls: startUrlsText.split('\n').map(s => s.trim()).filter(Boolean),
       })
       toast.success('配置已保存')
       setSettingsModalOpen(false)
@@ -839,201 +686,31 @@ export function BrowserListPage() {
     await handleClaimStarGift()
   }
 
-  const columns: TableColumn<BrowserProfile>[] = [
-    {
-      key: 'selection',
-      title: (
-        <input
-          type="checkbox"
-          className="w-4 h-4 rounded cursor-pointer accent-[var(--color-accent)]"
-          checked={selectedIds.size > 0 && selectedIds.size === filteredProfiles.length}
-          ref={(input) => { if (input) input.indeterminate = selectedIds.size > 0 && selectedIds.size < filteredProfiles.length }}
-          onChange={(e) => {
-            if (e.target.checked) handleSelectAll()
-            else handleDeselectAll()
-          }}
-        />
-      ),
-      width: 40,
-      render: (_, record) => (
-        <input
-          type="checkbox"
-          className="w-4 h-4 rounded cursor-pointer accent-[var(--color-accent)]"
-          checked={selectedIds.has(record.profileId)}
-          onChange={() => toggleSelect(record.profileId)}
-        />
-      ),
-    },
-    {
-      key: 'profileName',
-      title: '实例名称',
-      render: (value, record) => (
-        <div className="flex flex-col gap-1">
-          <Link className="text-[var(--color-accent)] text-sm font-medium hover:underline" to={`/browser/detail/${record.profileId}`}>
-            {value}
-          </Link>
-          {record.tags && record.tags.length > 0 && (
-            <div className="flex gap-1 flex-wrap">
-              {record.tags.map(tag => <Badge variant="default" key={tag}>{tag}</Badge>)}
-            </div>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: 'running',
-      title: '状态',
-      width: 100,
-      render: (_, record) => {
-        const status = getProfileStatus(record)
-        return <Badge variant={status.variant} dot>{status.label}</Badge>
-      },
-    },
-    {
-      key: 'coreId',
-      title: '核心',
-      render: (_, record) => {
-        return <span className="text-xs">{getProfileCoreLabel(record)}</span>
-      },
-    },
-    {
-      key: 'proxyId',
-      title: '代理',
-      render: (value) => {
-        const proxy = proxies.find(p => p.proxyId === value)
-        return <span className="text-xs">{proxy ? proxy.proxyName : value || '-'}</span>
-      },
-    },
-    {
-      key: 'launchCode',
-      title: '快捷打开码',
-      render: (value, record) => <LaunchCodeCell profileId={record.profileId} code={value || ''} onRefresh={loadProfiles} />,
-    },
-    {
-      key: 'keywords',
-      title: '关键字',
-      width: 200,
-      render: (value) => <KeywordInlineRow keywords={value || []} />,
-    },
-    {
-      key: 'updatedAt',
-      title: '上次更新',
-      render: formatTime,
-    },
-    {
-      key: 'actions',
-      title: '操作',
-      align: 'right',
-      render: (_, record) => {
-        const isStarting = isProfileStarting(record.profileId)
-        const isStopping = isProfileStopping(record.profileId)
-        const isBusy = isProfileBusy(record.profileId)
-
-        return (
-          <div className="flex justify-end gap-1">
-            {record.running ? (
-              <Button size="sm" variant="secondary" onClick={() => handleStop(record.profileId)} title="停止" loading={isStopping}>
-                {!isStopping && <Square className="w-3.5 h-3.5" />}
-              </Button>
-            ) : (
-              <Button size="sm" onClick={() => handleStart(record.profileId)} title="启动" loading={isStarting}>
-                {!isStarting && <Play className="w-3.5 h-3.5 fill-current" />}
-              </Button>
-            )}
-            <Button size="sm" variant="ghost" onClick={() => handleRestart(record.profileId)} title="重启" disabled={isBusy}><RotateCcw className="w-3.5 h-3.5" /></Button>
-            <Button size="sm" variant="ghost" onClick={() => openKwModal(record)} title="关键字" disabled={isBusy}><Key className="w-3.5 h-3.5" /></Button>
-            <Link to={`/browser/edit/${record.profileId}`}><Button size="sm" variant="ghost" title="配置" disabled={isBusy}><Settings className="w-3.5 h-3.5" /></Button></Link>
-            <Button size="sm" variant="ghost" onClick={() => openCopyModal(record)} title="克隆" disabled={isBusy}><Copy className="w-3.5 h-3.5" /></Button>
-            <Button size="sm" variant="ghost" onClick={() => handleDelete(record.profileId)} title="删除" disabled={isBusy}><Trash2 className="w-3.5 h-3.5 text-red-500" /></Button>
-          </div>
-        )
-      },
-    },
-  ]
-
-
-  const coreColumns: TableColumn<BrowserCore>[] = [
-    { key: 'coreName', title: '名称' },
-    { key: 'corePath', title: '路径' },
-    {
-      key: 'isDefault',
-      title: '默认',
-      render: (value) => value ? <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" /> : null,
-    },
-    {
-      key: 'actions',
-      title: '操作',
-      align: 'right',
-      render: (_, record) => (
-        <div className="flex justify-end gap-1">
-          {!record.isDefault && (
-            <Button size="sm" variant="ghost" onClick={() => handleSetDefaultCore(record.coreId)} title="设为默认"><Star className="w-4 h-4" /></Button>
-          )}
-          <Button size="sm" variant="ghost" onClick={() => handleOpenCoreModal(record)} title="编辑"><Edit2 className="w-4 h-4" /></Button>
-          <Button size="sm" variant="ghost" onClick={() => handleDeleteCore(record.coreId)} title="删除"><Trash2 className="w-4 h-4" /></Button>
-        </div>
-      ),
-    },
-  ]
 
   return (
     <div className="overflow-auto p-5 space-y-5 animate-fade-in h-full">
-      {/* 页头 */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">实例列表</h1>
-          <p className="text-sm text-[var(--color-text-muted)] mt-1">
-            当前配置总数 {profiles.length}
-            {filteredProfiles.length !== profiles.length && <span className="ml-1 text-[var(--color-accent)]">（已筛选 {filteredProfiles.length}）</span>}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={() => setHeaderCollapsed(prev => !prev)}>{headerCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}{headerCollapsed ? '展开面板' : '收起面板'}</Button>
-          <Button variant="secondary" size="sm" onClick={() => { void loadProfiles() }}><RefreshCw className="w-4 h-4" />刷新</Button>
-          <Button variant="secondary" size="sm" onClick={handleOpenSettings}><Sliders className="w-4 h-4" />基础配置</Button>
-          <Button variant="secondary" size="sm" onClick={() => { setCdKey(''); setExpandModalOpen(true); loadQuota() }} className="text-[var(--color-primary)] border-[var(--color-primary)] hover:bg-[var(--color-primary)]/10">
-            <Gift className="w-4 h-4" />扩容实例
-          </Button>
-          <div className="flex items-center bg-[var(--color-bg-secondary)] rounded-md border border-[var(--color-border-default)] p-0.5 ml-2">
-            <button
-              className={`p-1.5 rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors ${viewMode === 'card' ? 'bg-[var(--color-bg-surface)] shadow-sm text-[var(--color-accent)]' : ''}`}
-              onClick={() => setViewMode('card')}
-              title="卡片视图"
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </button>
-            <button
-              className={`p-1.5 rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors ${viewMode === 'table' ? 'bg-[var(--color-bg-surface)] shadow-sm text-[var(--color-accent)]' : ''}`}
-              onClick={() => setViewMode('table')}
-              title="表格视图"
-            >
-              <List className="w-4 h-4" />
-            </button>
-          </div>
-          <span className="w-px h-4 bg-[var(--color-border-muted)] mx-1 self-center"></span>
-          <Link to="/browser/edit/new"><Button size="sm"><Play className="w-4 h-4" />新建配置</Button></Link>
-        </div>
-      </div>
-
-      {/* 可折叠的统计+筛选区 */}
-      {!headerCollapsed && (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <StatCard title="配置总数" value={`${profiles.length}`} icon={<FileText className="w-5 h-5" />} />
-            <StatCard title="运行中实例" value={`${runningCount}`} icon={<Activity className="w-5 h-5" />} />
-            <StatCard title="停止实例" value={`${profiles.length - runningCount}`} icon={<Square className="w-5 h-5 text-gray-400" />} />
-          </div>
-
-          <InstanceFilterBar
-            filters={filters}
-            onChange={setFilters}
-            proxies={proxies}
-            cores={cores}
-            allTags={allTags}
-            groups={groups}
-          />
-        </>
-      )}
+      <BrowserListHeader
+        profileCount={profiles.length}
+        filteredProfileCount={filteredProfiles.length}
+        runningCount={runningCount}
+        headerCollapsed={headerCollapsed}
+        viewMode={viewMode}
+        proxies={proxies}
+        cores={cores}
+        groups={groups}
+        allTags={allTags}
+        filters={filters}
+        onFiltersChange={setFilters}
+        onToggleHeaderCollapsed={() => setHeaderCollapsed((prev) => !prev)}
+        onRefresh={() => { void loadProfiles() }}
+        onOpenSettings={handleOpenSettings}
+        onOpenExpandModal={() => {
+          setCdKey('')
+          setExpandModalOpen(true)
+          loadQuota()
+        }}
+        onViewModeChange={setViewMode}
+      />
 
       {/* 批量操作工具栏 */}
       <BatchToolbar
@@ -1047,336 +724,99 @@ export function BrowserListPage() {
         batchLoading={batchLoading}
       />
 
-      <Card padding="none">
-        <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 320px)' }}>
-          {/* Replace table with Flex column of Cards */}
-          {loading ? (
-            <div className="py-16 flex items-center justify-center text-sm text-[var(--color-text-muted)]">加载中...</div>
-          ) : filteredProfiles.length === 0 ? (
-            <div className="py-16 flex items-center justify-center text-sm text-[var(--color-text-muted)]">暂无数据</div>
-          ) : viewMode === 'table' ? (
-            <Table
-              columns={columns}
-              data={filteredProfiles}
-              rowKey="profileId"
-            />
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-[500px] p-4 items-start content-start">
-              {filteredProfiles.map((record) => {
-                const isSelected = selectedIds.has(record.profileId)
-                const core = resolveProfileCore(record)
-                const proxy = proxies.find(p => p.proxyId === record.proxyId)
-                const status = getProfileStatus(record)
-                const isStarting = isProfileStarting(record.profileId)
-                const isStopping = isProfileStopping(record.profileId)
-                const isBusy = isProfileBusy(record.profileId)
+      <BrowserProfilesPanel
+        loading={loading}
+        viewMode={viewMode}
+        profiles={filteredProfiles}
+        proxies={proxies}
+        selectedIds={selectedIds}
+        resolveProfileCore={resolveProfileCore}
+        getProfileCoreLabel={getProfileCoreLabel}
+        getProfileStatus={getProfileStatus}
+        isProfileStarting={isProfileStarting}
+        isProfileStopping={isProfileStopping}
+        isProfileBusy={isProfileBusy}
+        onToggleSelect={toggleSelect}
+        onSelectAll={handleSelectAll}
+        onDeselectAll={handleDeselectAll}
+        onRefreshProfiles={() => { void loadProfiles() }}
+        onStart={(profileId) => { void handleStart(profileId) }}
+        onStop={(profileId) => { void handleStop(profileId) }}
+        onRestart={(profileId) => { void handleRestart(profileId) }}
+        onOpenKeywords={openKwModal}
+        onOpenCopy={openCopyModal}
+        onDelete={(profileId) => { void handleDelete(profileId) }}
+      />
 
-                return (
-                  <div
-                    key={record.profileId}
-                    className={`flex flex-col border rounded-xl bg-[var(--color-bg-surface)] p-3 shadow-[0_1px_4px_rgba(0,0,0,0.08)] transition-all duration-200 h-[320px] overflow-hidden
-                        ${isSelected ? 'border-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/20' : 'border-[var(--color-border-default)] hover:border-[var(--color-accent)]'}
-                      `}
-                  >
-                    {/* Header Row: Title, Status, Checkbox, Actions */}
-                    <div className="flex flex-col gap-3 pb-3 border-b border-[var(--color-border-muted)]/50 shrink-0">
+      <BrowserListSettingsModal
+        open={settingsModalOpen}
+        settings={settings}
+        fingerprintText={fingerprintText}
+        launchText={launchText}
+        startUrlsText={startUrlsText}
+        savingSettings={savingSettings}
+        cores={cores}
+        onClose={() => setSettingsModalOpen(false)}
+        onSave={handleSaveSettings}
+        onSettingsChange={(patch) => setSettings((prev) => ({ ...prev, ...patch }))}
+        onFingerprintTextChange={setFingerprintText}
+        onLaunchTextChange={setLaunchText}
+        onStartUrlsTextChange={setStartUrlsText}
+        onAddCore={() => handleOpenCoreModal()}
+        onEditCore={handleOpenCoreModal}
+        onDeleteCore={handleDeleteCore}
+        onSetDefaultCore={handleSetDefaultCore}
+      />
 
-                      <div className="flex justify-between items-start gap-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4 rounded cursor-pointer accent-[var(--color-accent)] mt-0.5 shrink-0"
-                            checked={isSelected}
-                            onChange={() => toggleSelect(record.profileId)}
-                          />
-                          <Link className="text-[var(--color-accent)] font-medium text-sm hover:text-[var(--color-accent)] transition-colors truncate max-w-[200px]" to={`/browser/detail/${record.profileId}`}>
-                            {record.profileName}
-                          </Link>
-                          {record.tags && record.tags.length > 0 && (
-                            <div className="flex gap-1 ml-1">
-                              {record.tags.map(tag => <Badge variant="default" key={tag}>{tag}</Badge>)}
-                            </div>
-                          )}
-                        </div>
+      <BrowserCoreEditorModal
+        open={coreModalOpen}
+        coreForm={coreForm}
+        coreValidation={coreValidation}
+        savingCore={savingCore}
+        onClose={() => setCoreModalOpen(false)}
+        onSave={handleSaveCore}
+        onValidate={handleValidateCorePath}
+        onCoreFormChange={(patch) => {
+          setCoreForm((prev) => ({ ...prev, ...patch }))
+          if (Object.prototype.hasOwnProperty.call(patch, 'corePath')) {
+            setCoreValidation(null)
+          }
+        }}
+      />
 
-                        <Badge variant={status.variant} dot dotClassName="w-2 h-2 shrink-0">
-                          {status.label}
-                        </Badge>
-                      </div>
-
-                      <div className="flex items-center gap-1 flex-wrap">
-                        {record.running ? (
-                          <Button size="sm" variant="secondary" onClick={() => handleStop(record.profileId)} title={isStopping ? '停止中' : '停止'} loading={isStopping}>
-                            {!isStopping && <Square className="w-4 h-4 mr-1.5" />}
-                            {isStopping ? '停止中' : '停止'}
-                          </Button>
-                        ) : (
-                          <Button size="sm" onClick={() => handleStart(record.profileId)} title={isStarting ? '启动中' : '启动'} loading={isStarting}>
-                            {!isStarting && <Play className="w-4 h-4 fill-current mr-1.5" />}
-                            {isStarting ? '启动中' : '启动'}
-                          </Button>
-                        )}
-                        <span className="w-px h-4 bg-[var(--color-border-muted)] mx-1"></span>
-                        <Button size="sm" variant="ghost" onClick={() => handleRestart(record.profileId)} title="重启" className="px-3" disabled={isBusy}><RotateCcw className="w-4 h-4 mr-1.5" />重启</Button>
-                        <Button size="sm" variant="ghost" onClick={() => openKwModal(record)} title="关键字管理" className="px-3" disabled={isBusy}><Key className="w-4 h-4 mr-1.5" />关键字</Button>
-                        <Link to={`/browser/edit/${record.profileId}`}><Button size="sm" variant="ghost" title="配置" className="px-3" disabled={isBusy}><Settings className="w-4 h-4 mr-1.5" />配置</Button></Link>
-                        <Button size="sm" variant="ghost" onClick={() => openCopyModal(record)} title="克隆" className="px-3" disabled={isBusy}><Copy className="w-4 h-4 mr-1.5" />克隆</Button>
-                        <Button size="sm" variant="ghost" onClick={() => handleDelete(record.profileId)} title="删除" className="px-3 text-red-500 hover:text-red-600 hover:bg-red-50" disabled={isBusy}><Trash2 className="w-4 h-4 mr-1.5" />删除</Button>
-                      </div>
-                    </div>
-
-                    {/* Body Grid: Key-Value Pairs */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-2 shrink-0">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-xs text-[var(--color-text-muted)] font-medium">内核版本</span>
-                        <span className="text-xs text-[var(--color-text-primary)]">{core?.coreName || getProfileCoreLabel(record)}</span>
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-xs text-[var(--color-text-muted)] font-medium">代理配置</span>
-                        <span className="text-xs text-[var(--color-text-primary)]">{proxy?.proxyName || record.proxyId || '-'}</span>
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-xs text-[var(--color-text-muted)] font-medium">快捷配置码</span>
-                        <div className="mt-0.5"><LaunchCodeCell profileId={record.profileId} code={record.launchCode || ''} onRefresh={loadProfiles} /></div>
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-xs text-[var(--color-text-muted)] font-medium">上次更新时间</span>
-                        <span className="text-xs text-[var(--color-text-primary)]">{formatTime(record.updatedAt)}</span>
-                      </div>
-                    </div>
-
-                    {/* Footer: Keywords */}
-                    <div className="border-t border-[var(--color-border-muted)]/50 pt-2 flex items-start gap-2 flex-1 min-h-0">
-                      <span className="text-xs font-medium text-[var(--color-text-primary)] shrink-0 pt-0.5">系统关键字</span>
-                      <div className="flex-1 min-h-0 overflow-y-auto pr-1">
-                        <KeywordInlineRow keywords={record.keywords || []} />
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      </Card>
-
-      {/* 基础配置弹窗 */}
-      <Modal open={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} title="基础配置" width="700px"
-        footer={<><Button variant="secondary" onClick={() => setSettingsModalOpen(false)}>取消</Button><Button onClick={handleSaveSettings} loading={savingSettings}>保存</Button></>}>
-        <div className="space-y-6">
-          {/* 内核管理 */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-[var(--color-text-primary)]">内核管理</span>
-              <div className="flex gap-2">
-                <Button size="sm" onClick={() => handleOpenCoreModal()}><Plus className="w-4 h-4" />新增内核</Button>
-              </div>
-            </div>
-            <Card padding="none">
-              <Table columns={coreColumns} data={cores} rowKey="coreId" />
-            </Card>
-          </div>
-
-          {/* 其他设置 */}
-          <FormItem label="用户数据根目录">
-            <Input value={settings.userDataRoot} onChange={e => setSettings(prev => ({ ...prev, userDataRoot: e.target.value }))} placeholder="data" />
-          </FormItem>
-          <FormItem label="默认指纹参数（每行一个）">
-            <Textarea value={fingerprintText} onChange={e => setFingerprintText(e.target.value)} rows={3} placeholder="--fingerprint-brand=Chrome" />
-          </FormItem>
-          <FormItem label="默认启动参数（每行一个）">
-            <Textarea value={launchText} onChange={e => setLaunchText(e.target.value)} rows={3} placeholder="--disable-sync" />
-          </FormItem>
-          <FormItem label="默认代理">
-            <Input value={settings.defaultProxy} onChange={e => setSettings(prev => ({ ...prev, defaultProxy: e.target.value }))} placeholder="http://127.0.0.1:7890" />
-          </FormItem>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormItem label="启动就绪超时（毫秒）" hint="默认 3000，慢机器可调到 5000-10000">
-              <Input
-                type="number"
-                min={1000}
-                step={500}
-                value={settings.startReadyTimeoutMs}
-                onChange={e => setSettings(prev => ({ ...prev, startReadyTimeoutMs: Math.max(1000, Number(e.target.value) || 3000) }))}
-                placeholder="3000"
-              />
-            </FormItem>
-            <FormItem label="启动稳定窗口（毫秒）" hint="建议 1200-3000">
-              <Input
-                type="number"
-                min={0}
-                step={100}
-                value={settings.startStableWindowMs}
-                onChange={e => setSettings(prev => ({ ...prev, startStableWindowMs: Math.max(0, Number(e.target.value) || 1200) }))}
-                placeholder="1200"
-              />
-            </FormItem>
-          </div>
-        </div>
-      </Modal>
-
-      {/* 内核编辑弹窗 */}
-      <Modal open={coreModalOpen} onClose={() => setCoreModalOpen(false)} title={coreForm.coreId ? '编辑内核' : '新增内核'} width="500px"
-        footer={<><Button variant="secondary" onClick={() => setCoreModalOpen(false)}>取消</Button><Button onClick={handleSaveCore} loading={savingCore}>保存</Button></>}>
-        <div className="space-y-4">
-          <FormItem label="内核名称" required>
-            <Input value={coreForm.coreName} onChange={e => setCoreForm(prev => ({ ...prev, coreName: e.target.value }))} placeholder="Chrome 142" />
-          </FormItem>
-          <FormItem label="内核路径" required>
-            <div className="flex gap-2">
-              <Input value={coreForm.corePath} onChange={e => { setCoreForm(prev => ({ ...prev, corePath: e.target.value })); setCoreValidation(null) }} placeholder="chrome 或 D:/browsers/chrome-120" className="flex-1" />
-              <Button variant="secondary" onClick={handleValidateCorePath}>验证</Button>
-            </div>
-            {coreValidation && (
-              <div className={`flex items-center gap-1 mt-1 text-sm ${coreValidation.valid ? 'text-green-600' : 'text-red-600'}`}>
-                {coreValidation.valid ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
-                {coreValidation.message}
-              </div>
-            )}
-          </FormItem>
-        </div>
-      </Modal>
-
-      {/* 代理不支持弹窗 */}
-      <Modal
-        open={proxyErrorModal}
-        onClose={() => { setProxyErrorModal(false); setPendingStartId(null) }}
-        title="代理链路不可用"
-        width="420px"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => { setProxyErrorModal(false); setPendingStartId(null) }}>取消</Button>
-            {pendingStartId && (
-              <Link to={`/browser/edit/${pendingStartId}`}>
-                <Button onClick={() => setProxyErrorModal(false)}>去修改代理</Button>
-              </Link>
-            )}
-          </>
-        }
-      >
-        <div className="space-y-3">
-          <div className="flex items-start gap-3 p-3 rounded-lg bg-[var(--color-bg-secondary)]">
-            <XCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
-            <p className="text-sm text-[var(--color-text-primary)]">{proxyErrorMsg}</p>
-          </div>
-          <p className="text-sm text-[var(--color-text-muted)]">请前往编辑页面重新选择可用链路；如果是订阅导入，先刷新订阅并确认该节点仍存在。</p>
-        </div>
-      </Modal>
-
-      {/* 关键字弹窗 */}
-      {kwModal.profile && (
-        <KeywordsModal
-          open={kwModal.open}
-          profileId={kwModal.profile.profileId}
-          profileName={kwModal.profile.profileName}
-          initialKeywords={kwModal.profile.keywords || []}
-          onClose={closeKwModal}
-          onSaved={(keywords) => {
-            updateProfilesState(prev => prev.map(p =>
-              p.profileId === kwModal.profile!.profileId ? { ...p, keywords } : p
-            ))
-          }}
-        />
-      )}
-
-      {/* 扩容弹窗 */}
-      <Modal
-        open={expandModalOpen}
-        onClose={() => setExpandModalOpen(false)}
-        title="实例扩容系统"
-        width="480px"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setExpandModalOpen(false)}>关闭</Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div className="bg-[var(--color-bg-secondary)] p-4 rounded-lg flex items-center justify-between border border-[var(--color-border-default)]">
-            <div>
-              <p className="text-sm font-medium text-[var(--color-text-primary)]">当前使用情况</p>
-              <p className="text-xs text-[var(--color-text-muted)] mt-1">每个配置都需要消耗 1 个实例额度</p>
-            </div>
-            <div className="text-right">
-              <span className={`text-2xl font-semibold ${profiles.length >= maxProfileLimit ? 'text-red-500' : 'text-[var(--color-success)]'}`}>
-                {profiles.length}
-              </span>
-              <span className="text-sm text-[var(--color-text-muted)] ml-1">/ {maxProfileLimit}</span>
-            </div>
-          </div>
-
-          <div className="pt-2 border-t border-[var(--color-border-muted)]">
-            <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">使用兑换码扩容</label>
-            <div className="flex gap-2">
-              <Input
-                value={cdKey}
-                onChange={e => setCdKey(e.target.value)}
-                placeholder="输入兑换码 (如 ANT-...)"
-                onKeyDown={e => e.key === 'Enter' && handleRedeem()}
-                className="flex-1"
-              />
-              <Button onClick={handleRedeem} loading={redeeming} disabled={!cdKey.trim()}>
-                进行兑换
-              </Button>
-            </div>
-          </div>
-
-          <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-            <div className="flex items-center justify-between gap-4">
-              <p className="text-sm text-[var(--color-text-primary)]">点亮 GitHub Star 后，可再获赠 50 个永久额度</p>
-              <button
-                type="button"
-                className="shrink-0 rounded-full p-2 text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)]/10 disabled:opacity-50"
-                onClick={handleOpenGithubStarGift}
-                disabled={redeeming}
-                title="打开 GitHub 并领取赠送"
-                aria-label="打开 GitHub 并领取赠送"
-              >
-                <ExternalLink className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </Modal>
-
-      {/* 复制实例弹窗 */}
-      <Modal
-        open={copyModal.open}
-        onClose={closeCopyModal}
-        title="复制实例"
-        width="420px"
-        footer={
-          <>
-            <Button variant="secondary" onClick={closeCopyModal}>取消</Button>
-            <Button onClick={() => copyModal.profile && handleCopy(copyModal.profile.profileId)} loading={copying}>确认复制</Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-[var(--color-text-muted)]">
-            复制实例将保留原有的代理、内核、启动参数、标签等配置，但会生成新的指纹种子。
-          </p>
-          <FormItem label="新实例名称" required>
-            <Input
-              value={copyName}
-              onChange={e => setCopyName(e.target.value)}
-              placeholder="请输入新实例名称"
-              autoFocus
-            />
-          </FormItem>
-        </div>
-      </Modal>
-
-      {/* 操作错误弹窗 */}
-      <Modal
-        open={!!opError}
-        onClose={() => setOpError('')}
-        title="操作失败"
-        width="420px"
-        footer={<Button onClick={() => setOpError('')}>知道了</Button>}
-      >
-        <div className="text-[var(--color-text-secondary)] whitespace-pre-line">{opError}</div>
-      </Modal>
+      <BrowserListDialogs
+        proxyErrorModal={proxyErrorModal}
+        pendingStartId={pendingStartId}
+        proxyErrorMsg={proxyErrorMsg}
+        onCloseProxyError={() => {
+          setProxyErrorModal(false)
+          setPendingStartId(null)
+        }}
+        kwModal={kwModal}
+        onCloseKeywords={closeKwModal}
+        onKeywordsSaved={(keywords) => {
+          updateProfilesState(prev => prev.map(p =>
+            p.profileId === kwModal.profile!.profileId ? { ...p, keywords } : p
+          ))
+        }}
+        expandModalOpen={expandModalOpen}
+        onCloseExpand={() => setExpandModalOpen(false)}
+        profilesCount={profiles.length}
+        maxProfileLimit={maxProfileLimit}
+        cdKey={cdKey}
+        onCdKeyChange={setCdKey}
+        onRedeem={handleRedeem}
+        redeeming={redeeming}
+        onOpenGithubStarGift={handleOpenGithubStarGift}
+        copyModal={copyModal}
+        copyName={copyName}
+        onCopyNameChange={setCopyName}
+        onCloseCopy={closeCopyModal}
+        onConfirmCopy={() => copyModal.profile && handleCopy(copyModal.profile.profileId)}
+        copying={copying}
+        opError={opError}
+        onCloseOpError={() => setOpError('')}
+      />
     </div>
   )
 }

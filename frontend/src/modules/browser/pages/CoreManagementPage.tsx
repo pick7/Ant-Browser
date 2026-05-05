@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { FolderOpen, Settings, Edit2 } from 'lucide-react'
-import { Badge, Button, Card, ConfirmModal, FormItem, Input, Modal, Table, Textarea, toast } from '../../../shared/components'
+import { Badge, Button, Card, ConfirmModal, FormItem, Input, Modal, Switch, Table, Textarea, toast } from '../../../shared/components'
 import type { TableColumn } from '../../../shared/components/Table'
 import type { BrowserCore, BrowserCoreInput, BrowserCoreValidateResult, BrowserSettings, BrowserCoreExtended, BrowserProxy } from '../types'
 import { fetchBrowserCores, saveBrowserCore, deleteBrowserCore, setDefaultBrowserCore, validateBrowserCorePath, openCorePath, fetchBrowserSettings, saveBrowserSettings, fetchCoreExtendedInfo, scanBrowserCores, BrowserCoreDownload, fetchBrowserProxies } from '../api'
@@ -28,16 +28,18 @@ export function CoreManagementPage() {
     userDataRoot: '',
     defaultFingerprintArgs: [],
     defaultLaunchArgs: [],
-    defaultProxy: '',
+    defaultStartUrls: [],
+    restoreLastSession: false,
     startReadyTimeoutMs: 3000,
     startStableWindowMs: 1200,
   })
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
   const [settingsForm, setSettingsForm] = useState({
     userDataRoot: '',
-    defaultProxy: '',
     defaultFingerprintArgs: '',
     defaultLaunchArgs: '',
+    defaultStartUrls: '',
+    restoreLastSession: false,
     startReadyTimeoutMs: 3000,
     startStableWindowMs: 1200,
   })
@@ -351,9 +353,10 @@ export function CoreManagementPage() {
   const handleEditSettings = () => {
     setSettingsForm({
       userDataRoot: settings.userDataRoot,
-      defaultProxy: settings.defaultProxy,
       defaultFingerprintArgs: settings.defaultFingerprintArgs.join('\n'),
       defaultLaunchArgs: settings.defaultLaunchArgs.join('\n'),
+      defaultStartUrls: settings.defaultStartUrls.join('\n'),
+      restoreLastSession: settings.restoreLastSession,
       startReadyTimeoutMs: settings.startReadyTimeoutMs,
       startStableWindowMs: settings.startStableWindowMs,
     })
@@ -366,9 +369,10 @@ export function CoreManagementPage() {
     try {
       const newSettings: BrowserSettings = {
         userDataRoot: settingsForm.userDataRoot.trim(),
-        defaultProxy: settingsForm.defaultProxy.trim(),
         defaultFingerprintArgs: settingsForm.defaultFingerprintArgs.split('\n').map(s => s.trim()).filter(Boolean),
         defaultLaunchArgs: settingsForm.defaultLaunchArgs.split('\n').map(s => s.trim()).filter(Boolean),
+        defaultStartUrls: settingsForm.defaultStartUrls.split('\n').map(s => s.trim()).filter(Boolean),
+        restoreLastSession: settingsForm.restoreLastSession,
         startReadyTimeoutMs: Math.max(1000, Number(settingsForm.startReadyTimeoutMs) || 3000),
         startStableWindowMs: Math.max(0, Number(settingsForm.startStableWindowMs) || 1200),
       }
@@ -416,10 +420,6 @@ export function CoreManagementPage() {
             <p className="text-sm text-[var(--color-text-primary)]">{settings.userDataRoot || '-'}</p>
           </div>
           <div>
-            <p className="text-xs text-[var(--color-text-muted)] mb-1">默认代理配置</p>
-            <p className="text-sm text-[var(--color-text-primary)]">{settings.defaultProxy || '-'}</p>
-          </div>
-          <div>
             <p className="text-xs text-[var(--color-text-muted)] mb-1">默认指纹参数</p>
             {settings.defaultFingerprintArgs.length > 0 ? (
               <pre className="text-xs text-[var(--color-text-secondary)] bg-[var(--color-bg-subtle)] p-2 rounded max-h-20 overflow-auto">
@@ -438,6 +438,20 @@ export function CoreManagementPage() {
             ) : (
               <p className="text-sm text-[var(--color-text-primary)]">-</p>
             )}
+          </div>
+          <div>
+            <p className="text-xs text-[var(--color-text-muted)] mb-1">默认启动页面</p>
+            {settings.defaultStartUrls.length > 0 ? (
+              <pre className="text-xs text-[var(--color-text-secondary)] bg-[var(--color-bg-subtle)] p-2 rounded max-h-20 overflow-auto">
+                {settings.defaultStartUrls.join('\n')}
+              </pre>
+            ) : (
+              <p className="text-sm text-[var(--color-text-primary)]">-</p>
+            )}
+          </div>
+          <div>
+            <p className="text-xs text-[var(--color-text-muted)] mb-1">恢复上次标签页</p>
+            <p className="text-sm text-[var(--color-text-primary)]">{settings.restoreLastSession ? '开启' : '关闭'}</p>
           </div>
           <div>
             <p className="text-xs text-[var(--color-text-muted)] mb-1">启动就绪超时</p>
@@ -482,13 +496,6 @@ export function CoreManagementPage() {
               placeholder="例如：data"
             />
           </FormItem>
-          <FormItem label="默认代理配置">
-            <Input
-              value={settingsForm.defaultProxy}
-              onChange={e => setSettingsForm(prev => ({ ...prev, defaultProxy: e.target.value }))}
-              placeholder="例如：http://127.0.0.1:7890"
-            />
-          </FormItem>
           <FormItem label="默认指纹参数">
             <Textarea
               value={settingsForm.defaultFingerprintArgs}
@@ -504,6 +511,26 @@ export function CoreManagementPage() {
               rows={4}
               placeholder="每行一个参数，如 --disable-sync"
             />
+          </FormItem>
+          <FormItem label="默认启动页面" hint="每行一个 URL，留空则启动时不自动打开页面">
+            <Textarea
+              value={settingsForm.defaultStartUrls}
+              onChange={e => setSettingsForm(prev => ({ ...prev, defaultStartUrls: e.target.value }))}
+              rows={4}
+              placeholder="https://ippure.com/"
+            />
+          </FormItem>
+          <FormItem label="恢复上次关闭的标签页" hint="关闭后只打开默认启动页或空白页">
+            <div className="flex items-center justify-between rounded-lg border border-[var(--color-border-default)] px-3 py-2">
+              <div>
+                <p className="text-sm text-[var(--color-text-primary)]">允许恢复旧 tab</p>
+                <p className="text-xs text-[var(--color-text-muted)] mt-1">关闭后，下次启动会继续恢复之前的标签页和窗口。</p>
+              </div>
+              <Switch
+                checked={settingsForm.restoreLastSession}
+                onChange={checked => setSettingsForm(prev => ({ ...prev, restoreLastSession: checked }))}
+              />
+            </div>
           </FormItem>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormItem label="启动就绪超时（毫秒）" hint="默认 3000，慢机器可调到 5000-10000">

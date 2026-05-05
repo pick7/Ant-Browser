@@ -58,6 +58,12 @@ browser: {}
 	if len(cfg.Browser.DefaultFingerprintArgs) == 0 || len(cfg.Browser.DefaultLaunchArgs) == 0 {
 		t.Fatalf("Browser 默认启动参数未补齐")
 	}
+	if len(cfg.Browser.DefaultStartURLs) != 3 {
+		t.Fatalf("Browser 默认启动页面未补齐: got=%v", cfg.Browser.DefaultStartURLs)
+	}
+	if cfg.Browser.RestoreLastSession {
+		t.Fatalf("Browser.RestoreLastSession 默认应为 false")
+	}
 	if cfg.Browser.Cores == nil || cfg.Browser.Proxies == nil || cfg.Browser.Profiles == nil {
 		t.Fatalf("Browser 列表字段应初始化为空切片")
 	}
@@ -72,6 +78,30 @@ browser: {}
 	}
 	if cfg.LaunchServer.Auth.Header != DefaultLaunchServerAPIKeyHeader {
 		t.Fatalf("LaunchServer.Auth.Header 未补齐: got=%q", cfg.LaunchServer.Auth.Header)
+	}
+	if cfg.Automation.InstallPolicy != DefaultAutomationInstallPolicy {
+		t.Fatalf("Automation.InstallPolicy 未补齐: got=%q", cfg.Automation.InstallPolicy)
+	}
+	if cfg.Automation.RuntimeVersion != DefaultAutomationRuntimeVersion(DefaultAutomationNodeVersion, DefaultAutomationPWVersion) {
+		t.Fatalf("Automation.RuntimeVersion 未补齐: got=%q", cfg.Automation.RuntimeVersion)
+	}
+	if !cfg.Automation.KeepRuntimeOnDisable {
+		t.Fatalf("Automation.KeepRuntimeOnDisable 默认应为 true")
+	}
+	if cfg.Automation.NodeVersion != DefaultAutomationNodeVersion {
+		t.Fatalf("Automation.NodeVersion 未补齐: got=%q", cfg.Automation.NodeVersion)
+	}
+	if cfg.Automation.NodeSource != DefaultAutomationNodeSource {
+		t.Fatalf("Automation.NodeSource 未补齐: got=%q", cfg.Automation.NodeSource)
+	}
+	if cfg.Automation.SystemNodePath != "" {
+		t.Fatalf("Automation.SystemNodePath 默认应为空: got=%q", cfg.Automation.SystemNodePath)
+	}
+	if cfg.Automation.PlaywrightCoreVersion != DefaultAutomationPWVersion {
+		t.Fatalf("Automation.PlaywrightCoreVersion 未补齐: got=%q", cfg.Automation.PlaywrightCoreVersion)
+	}
+	if cfg.Automation.AllowTypeScriptBuild {
+		t.Fatalf("Automation.AllowTypeScriptBuild 默认应为 false")
 	}
 }
 
@@ -158,6 +188,8 @@ browser:
     - --fingerprint-brand=Edge
   default_launch_args:
     - --start-maximized
+  default_start_urls: []
+  restore_last_session: true
   default_proxy: direct://
   default_bookmarks: []
   cores: []
@@ -169,6 +201,17 @@ launch_server:
     enabled: true
     api_key: secret-key
     header: X-Custom-Ant-Key
+automation:
+  enabled: true
+  install_policy: on_demand
+  runtime_version: custom-runtime
+  headless_default: true
+  keep_runtime_on_disable: false
+  allow_typescript_build: true
+  node_source: system
+  system_node_path: C:/tools/node/node.exe
+  node_version: 22.15.1
+  playwright_core_version: 1.59.0
 `
 	if err := os.WriteFile(configPath, []byte(customConfig), 0o644); err != nil {
 		t.Fatalf("写入测试配置失败: %v", err)
@@ -197,7 +240,13 @@ launch_server:
 	if len(cfg.Browser.DefaultFingerprintArgs) != 1 || cfg.Browser.DefaultFingerprintArgs[0] != "--fingerprint-brand=Edge" {
 		t.Fatalf("Browser.DefaultFingerprintArgs 显式配置被覆盖: got=%v", cfg.Browser.DefaultFingerprintArgs)
 	}
-	if cfg.Browser.UserDataRoot != "custom_data" || cfg.Browser.DefaultProxy != "direct://" {
+	if cfg.Browser.DefaultStartURLs == nil || len(cfg.Browser.DefaultStartURLs) != 0 {
+		t.Fatalf("Browser.DefaultStartURLs 显式空配置被覆盖: got=%v", cfg.Browser.DefaultStartURLs)
+	}
+	if !cfg.Browser.RestoreLastSession {
+		t.Fatalf("Browser.RestoreLastSession 显式 true 被覆盖")
+	}
+	if cfg.Browser.UserDataRoot != "custom_data" {
 		t.Fatalf("Browser 显式配置被覆盖: got=%+v", cfg.Browser)
 	}
 	if cfg.LaunchServer.Port != 30000 {
@@ -211,6 +260,24 @@ launch_server:
 	}
 	if cfg.LaunchServer.Auth.Header != "X-Custom-Ant-Key" {
 		t.Fatalf("LaunchServer.Auth.Header 显式配置被覆盖: got=%q", cfg.LaunchServer.Auth.Header)
+	}
+	if !cfg.Automation.Enabled || !cfg.Automation.HeadlessDefault {
+		t.Fatalf("Automation 显式配置被覆盖: got=%+v", cfg.Automation)
+	}
+	if cfg.Automation.RuntimeVersion != "custom-runtime" {
+		t.Fatalf("Automation.RuntimeVersion 显式配置被覆盖: got=%q", cfg.Automation.RuntimeVersion)
+	}
+	if cfg.Automation.KeepRuntimeOnDisable {
+		t.Fatalf("Automation.KeepRuntimeOnDisable 显式 false 被覆盖")
+	}
+	if cfg.Automation.NodeSource != AutomationNodeSourceSystem {
+		t.Fatalf("Automation.NodeSource 显式配置被覆盖: got=%q", cfg.Automation.NodeSource)
+	}
+	if cfg.Automation.SystemNodePath != "C:/tools/node/node.exe" {
+		t.Fatalf("Automation.SystemNodePath 显式配置被覆盖: got=%q", cfg.Automation.SystemNodePath)
+	}
+	if !cfg.Automation.AllowTypeScriptBuild {
+		t.Fatalf("Automation.AllowTypeScriptBuild 显式 true 被覆盖")
 	}
 }
 

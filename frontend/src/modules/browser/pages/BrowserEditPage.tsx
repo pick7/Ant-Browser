@@ -10,8 +10,7 @@ import { GroupSelector } from '../components/GroupSelector'
 import { ProxyPickerModal } from '../components/ProxyPickerModal'
 
 const fallbackLowLaunchArgs = ['--disable-sync', '--no-first-run']
-const BROWSER_LIST_ROUTE = '/browser/list'
-const DIRECT_PROXY_ID = '__direct__'
+const directProxyID = '__direct__'
 
 function normalizeLaunchArgs(args: string[]): string[] {
   return (args || []).map(item => item.trim()).filter(Boolean)
@@ -20,6 +19,33 @@ function normalizeLaunchArgs(args: string[]): string[] {
 function resolveDefaultLaunchArgs(args: string[]): string[] {
   const normalized = normalizeLaunchArgs(args)
   return normalized.length > 0 ? normalized : fallbackLowLaunchArgs
+}
+
+function resolvePoolProxySelection(
+  proxyId: string,
+  proxyConfig: string,
+  proxies: BrowserProxy[],
+): { proxyId: string; proxyConfig: string } {
+  const normalizedProxyId = proxyId.trim()
+  if (normalizedProxyId) {
+    const matchedByID = proxies.find((proxy) => proxy.proxyId.trim() === normalizedProxyId)
+    if (matchedByID?.proxyId) {
+      return { proxyId: matchedByID.proxyId, proxyConfig: '' }
+    }
+  }
+
+  const rawProxyConfig = proxyConfig.trim()
+  const normalizedConfig = rawProxyConfig.toLowerCase()
+  if (normalizedConfig) {
+    const matchedByConfig = proxies.find((proxy) => (proxy.proxyConfig || '').trim().toLowerCase() === normalizedConfig)
+    if (matchedByConfig?.proxyId) {
+      return { proxyId: matchedByConfig.proxyId, proxyConfig: '' }
+    }
+    return { proxyId: '', proxyConfig: rawProxyConfig }
+  }
+
+  const directProxy = proxies.find((proxy) => proxy.proxyId === directProxyID)
+  return { proxyId: directProxy?.proxyId || '', proxyConfig: '' }
 }
 
 export function BrowserEditPage() {
@@ -31,7 +57,7 @@ export function BrowserEditPage() {
     userDataDir: '',
     coreId: '',
     fingerprintArgs: [],
-    proxyId: '',
+    proxyId: directProxyID,
     proxyConfig: '',
     launchArgs: [],
     tags: [],
@@ -65,6 +91,8 @@ export function BrowserEditPage() {
       setGroups(groupList)
 
       if (isCreate) {
+        const resolved = resolvePoolProxySelection('', '', proxyList)
+        setFormData((prev) => ({ ...prev, proxyId: resolved.proxyId || directProxyID, proxyConfig: '' }))
         setLaunchArgsText(resolvedDefaultLaunchArgs.join('\n'))
         return
       }
@@ -75,13 +103,14 @@ export function BrowserEditPage() {
       const normalizedCoreId = !current.coreId || current.coreId.toLowerCase() === 'default'
         ? ''
         : current.coreId
+      const resolvedProxy = resolvePoolProxySelection(current.proxyId || '', current.proxyConfig || '', proxyList)
       setFormData({
         profileName: current.profileName,
         userDataDir: current.userDataDir,
         coreId: normalizedCoreId,
         fingerprintArgs: current.fingerprintArgs,
-        proxyId: current.proxyId,
-        proxyConfig: current.proxyConfig,
+        proxyId: resolvedProxy.proxyId,
+        proxyConfig: resolvedProxy.proxyConfig,
         launchArgs: currentLaunchArgs,
         tags: current.tags,
         keywords: current.keywords || [],
@@ -94,14 +123,30 @@ export function BrowserEditPage() {
 
   const handleChange = (field: keyof BrowserProfileInput, value: string | string[]) => {
     setIsDirty(true)
-    setFormData(prev => ({ ...prev, [field]: value }))
+    setFormData(prev => {
+      if (field === 'proxyId') {
+        return { ...prev, proxyId: typeof value === 'string' ? value : '', proxyConfig: '' }
+      }
+      return { ...prev, [field]: value }
+    })
   }
 
   const handleSave = async () => {
     setSaving(true)
+    const resolvedProxyId = (formData.proxyId || '').trim()
+    const resolvedProxyConfig = (formData.proxyConfig || '').trim()
     const payload: BrowserProfileInput = {
       ...formData,
+      proxyId: resolvedProxyId,
+      proxyConfig: '',
       launchArgs: normalizeLaunchArgs(launchArgsText.split('\n')),
+    }
+    if (!resolvedProxyId) {
+      if (resolvedProxyConfig) {
+        payload.proxyConfig = resolvedProxyConfig
+      } else {
+        payload.proxyId = directProxyID
+      }
     }
     try {
       if (isCreate) {
@@ -112,7 +157,7 @@ export function BrowserEditPage() {
         toast.success('配置已更新')
       }
       setIsDirty(false)
-      navigate(BROWSER_LIST_ROUTE)
+      navigate('/browser/list')
     } catch (error: any) {
       setSaveError(typeof error === 'string' ? error : error?.message || '保存失败')
     } finally {
@@ -121,7 +166,7 @@ export function BrowserEditPage() {
   }
 
   const handleBack = () => {
-    if (isDirty) { setLeaveConfirm(true) } else { navigate(BROWSER_LIST_ROUTE) }
+    if (isDirty) { setLeaveConfirm(true) } else { navigate('/browser/list') }
   }
 
   const defaultCore = cores.find(c => c.isDefault)
@@ -135,22 +180,6 @@ export function BrowserEditPage() {
       await openUserDataDir(formData.userDataDir)
     } catch (error: unknown) {
       toast.error((error as Error)?.message || '打开目录失败')
-    }
-  }
-
-  const handleProxyListUpdated = (nextProxies: BrowserProxy[]) => {
-    setProxies(nextProxies)
-  }
-
-  const handleProxyDeleted = (deletedProxyId: string, nextProxies: BrowserProxy[]) => {
-    setProxies(nextProxies)
-    if (formData.proxyId === deletedProxyId) {
-      const fallbackProxy = nextProxies.find(item => item.proxyId === DIRECT_PROXY_ID)
-      if (fallbackProxy) {
-        handleChange('proxyId', DIRECT_PROXY_ID)
-      } else {
-        handleChange('proxyId', '')
-      }
     }
   }
 
@@ -219,17 +248,21 @@ export function BrowserEditPage() {
         </div>
       </Card>
 
-      <Card title="代理配置" subtitle="选择代理池中的代理或手动输入">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <Card title="代理配置" subtitle="仅支持从代理池选择（包含直连节点）">
+        <div className="grid grid-cols-1 gap-4">
           <FormItem label="代理池选择">
             <div className="flex gap-2">
               <Select
                 value={formData.proxyId}
                 onChange={e => handleChange('proxyId', e.target.value)}
-                options={[
-                  { value: '', label: '不使用代理池' },
-                  ...proxies.map(p => ({ value: p.proxyId, label: p.proxyName || p.proxyId })),
-                ]}
+                options={
+                  proxies.length > 0 ? [
+                    ...(formData.proxyId === '' && formData.proxyConfig
+                      ? [{ value: '', label: '接口自定义代理（保持原值）' }]
+                      : []),
+                    ...proxies.map(p => ({ value: p.proxyId, label: p.proxyName || p.proxyId })),
+                  ] : [{ value: '', label: '暂无代理，请先到代理池创建' }]
+                }
                 className="flex-1"
               />
               <Button variant="secondary" size="sm" onClick={() => setProxyPickerOpen(true)} title="按分组选择代理">
@@ -237,29 +270,17 @@ export function BrowserEditPage() {
               </Button>
             </div>
           </FormItem>
-          <FormItem label="手动代理配置">
-            <Input
-              value={formData.proxyConfig}
-              onChange={e => handleChange('proxyConfig', e.target.value)}
-              placeholder="http://127.0.0.1:7890"
-              disabled={!!formData.proxyId}
-            />
-          </FormItem>
         </div>
-        {formData.proxyId && (
-          <p className="text-xs text-[var(--color-text-muted)] mt-2">已选择代理池代理，手动配置将被忽略</p>
-        )}
+        <p className="text-xs text-[var(--color-text-muted)] mt-2">
+          已移除手动代理输入，实例默认按代理池节点生效。
+          {formData.proxyId === '' && formData.proxyConfig ? ' 当前实例为接口自定义代理，未改动代理选择时会保持原值。' : ''}
+        </p>
       </Card>
 
       <ProxyPickerModal
         open={proxyPickerOpen}
         currentProxyId={formData.proxyId}
-        onSelect={proxy => {
-          handleChange('proxyId', proxy.proxyId)
-          setProxies(prev => prev.some(item => item.proxyId === proxy.proxyId) ? prev : [...prev, proxy])
-        }}
-        onProxyListUpdated={handleProxyListUpdated}
-        onProxyDeleted={handleProxyDeleted}
+        onSelect={proxy => handleChange('proxyId', proxy.proxyId)}
         onClose={() => setProxyPickerOpen(false)}
       />
 
@@ -287,7 +308,7 @@ export function BrowserEditPage() {
       <ConfirmModal
         open={leaveConfirm}
         onClose={() => setLeaveConfirm(false)}
-        onConfirm={() => navigate(BROWSER_LIST_ROUTE)}
+        onConfirm={() => navigate('/browser/list')}
         title="放弃未保存的更改？"
         content="当前页面有未保存的修改，离开后将丢失这些更改。"
         confirmText="放弃并离开"

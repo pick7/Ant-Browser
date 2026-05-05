@@ -1,10 +1,10 @@
 ﻿; Ant Browser NSIS Installer Script
-; Usage: makensis /DVERSION=1.1.0 /DSTAGINGDIR=C:\path\to\staging installer.nsi
+; Usage: makensis /DVERSION=1.2.0 /DSTAGINGDIR=C:\path\to\staging installer.nsi
 
 Unicode True
 
 !ifndef VERSION
-  !define VERSION "1.1.0"
+  !define VERSION "1.2.0"
 !endif
 !ifndef STAGINGDIR
   !define STAGINGDIR "..\publish\staging"
@@ -119,6 +119,45 @@ fallback_taskkill:
 done:
 FunctionEnd
 
+Function WarnInstallDir
+  StrCpy $0 "$INSTDIR"
+
+  StrLen $1 "$PROGRAMFILES64"
+  ${If} $1 > 0
+    StrCpy $2 "$0" $1
+    ${If} "$2" == "$PROGRAMFILES64"
+      Goto warn_dir
+    ${EndIf}
+  ${EndIf}
+
+  StrLen $1 "$PROGRAMFILES"
+  ${If} $1 > 0
+    StrCpy $2 "$0" $1
+    ${If} "$2" == "$PROGRAMFILES"
+      Goto warn_dir
+    ${EndIf}
+  ${EndIf}
+
+  StrLen $1 "$PROGRAMFILES32"
+  ${If} $1 > 0
+    StrCpy $2 "$0" $1
+    ${If} "$2" == "$PROGRAMFILES32"
+      Goto warn_dir
+    ${EndIf}
+  ${EndIf}
+
+  Return
+
+warn_dir:
+  MessageBox MB_ICONEXCLAMATION|MB_OKCANCEL|MB_DEFBUTTON2 "当前安装目录位于 Program Files。$\r$\n$\r$\n在部分机器上，普通权限运行可能无法写入 data 目录，导致再次启动闪退或浏览器实例启动失败。$\r$\n$\r$\n建议改为可写目录（如 D:\AntBrowser）。$\r$\n$\r$\n点击“确定”继续安装到当前目录，点击“取消”返回修改安装路径。" IDOK continue_install IDCANCEL cancel_install
+
+continue_install:
+  Return
+
+cancel_install:
+  Abort
+FunctionEnd
+
 Name "${PRODUCT_NAME} ${VERSION}"
 OutFile "..\publish\output\AntBrowser-Setup-${VERSION}.exe"
 InstallDir "${INSTALL_DIR}"
@@ -134,7 +173,9 @@ RequestExecutionLevel admin
 !define MUI_UNICON "..\build\windows\icon.ico"
 
 !insertmacro MUI_PAGE_WELCOME
+!define MUI_PAGE_CUSTOMFUNCTION_LEAVE WarnInstallDir
 !insertmacro MUI_PAGE_DIRECTORY
+!undef MUI_PAGE_CUSTOMFUNCTION_LEAVE
 !define MUI_COMPONENTSPAGE_SMALLDESC
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_INSTFILES

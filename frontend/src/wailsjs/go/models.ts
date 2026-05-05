@@ -1,5 +1,204 @@
+export namespace automation {
+
+	export class ScriptSource {
+	    type: string;
+	    uri: string;
+	    ref: string;
+	    path: string;
+	    importedAt: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ScriptSource(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.uri = source["uri"];
+	        this.ref = source["ref"];
+	        this.path = source["path"];
+	        this.importedAt = source["importedAt"];
+	    }
+	}
+	export class ScriptTargetSelector {
+	    code: string;
+	    profileId: string;
+	    profileName: string;
+	    groupId: string;
+	    keywords: string[];
+	    tags: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new ScriptTargetSelector(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.code = source["code"];
+	        this.profileId = source["profileId"];
+	        this.profileName = source["profileName"];
+	        this.groupId = source["groupId"];
+	        this.keywords = source["keywords"];
+	        this.tags = source["tags"];
+	    }
+	}
+	export class ScriptTargetConfig {
+	    mode: string;
+	    selector: ScriptTargetSelector;
+	    templateSelector: ScriptTargetSelector;
+	    createNameTemplate: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ScriptTargetConfig(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mode = source["mode"];
+	        this.selector = this.convertValues(source["selector"], ScriptTargetSelector);
+	        this.templateSelector = this.convertValues(source["templateSelector"], ScriptTargetSelector);
+	        this.createNameTemplate = source["createNameTemplate"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ScriptRecord {
+	    packageFormat: string;
+	    manifestVersion: number;
+	    id: string;
+	    name: string;
+	    description: string;
+	    type: string;
+	    status: string;
+	    entryFile: string;
+	    tags: string[];
+	    selectorText: string;
+	    paramsText: string;
+	    scriptText: string;
+	    notes: string;
+	    targetConfig: ScriptTargetConfig;
+	    source: ScriptSource;
+	    createdAt: string;
+	    updatedAt: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ScriptRecord(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.packageFormat = source["packageFormat"];
+	        this.manifestVersion = source["manifestVersion"];
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.type = source["type"];
+	        this.status = source["status"];
+	        this.entryFile = source["entryFile"];
+	        this.tags = source["tags"];
+	        this.selectorText = source["selectorText"];
+	        this.paramsText = source["paramsText"];
+	        this.scriptText = source["scriptText"];
+	        this.notes = source["notes"];
+	        this.targetConfig = this.convertValues(source["targetConfig"], ScriptTargetConfig);
+	        this.source = this.convertValues(source["source"], ScriptSource);
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ScriptRunRecord {
+	    id: string;
+	    scriptId: string;
+	    scriptName: string;
+	    scriptType: string;
+	    status: string;
+	    summary: string;
+	    error: string;
+	    resultText: string;
+	    startedAt: string;
+	    finishedAt: string;
+	    durationMs: number;
+
+	    static createFrom(source: any = {}) {
+	        return new ScriptRunRecord(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.scriptId = source["scriptId"];
+	        this.scriptName = source["scriptName"];
+	        this.scriptType = source["scriptType"];
+	        this.status = source["status"];
+	        this.summary = source["summary"];
+	        this.error = source["error"];
+	        this.resultText = source["resultText"];
+	        this.startedAt = source["startedAt"];
+	        this.finishedAt = source["finishedAt"];
+	        this.durationMs = source["durationMs"];
+	    }
+	}
+	export class ScriptRunRequest {
+	    scriptId: string;
+	    selectorText: string;
+	    paramsText: string;
+	    useScriptSelector: boolean;
+	    useScriptParams: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new ScriptRunRequest(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.scriptId = source["scriptId"];
+	        this.selectorText = source["selectorText"];
+	        this.paramsText = source["paramsText"];
+	        this.useScriptSelector = source["useScriptSelector"];
+	        this.useScriptParams = source["useScriptParams"];
+	    }
+	}
+
+
+
+}
+
 export namespace backend {
-	
+
 	export class CookieInfo {
 	    name: string;
 	    value: string;
@@ -9,11 +208,11 @@ export namespace backend {
 	    httpOnly: boolean;
 	    secure: boolean;
 	    sameSite: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CookieInfo(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -30,11 +229,11 @@ export namespace backend {
 	    maxLimit: number;
 	    usedCount: number;
 	    usedKeys: string[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new LicenseStatus(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.maxLimit = source["maxLimit"];
@@ -57,11 +256,11 @@ export namespace backend {
 	    asOrganization: string;
 	    rawData: Record<string, any>;
 	    updatedAt: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ProxyIPHealthResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.proxyId = source["proxyId"];
@@ -85,11 +284,11 @@ export namespace backend {
 	    ok: boolean;
 	    latencyMs: number;
 	    error: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ProxyTestResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.proxyId = source["proxyId"];
@@ -101,11 +300,11 @@ export namespace backend {
 	export class ProxyValidationResult {
 	    supported: boolean;
 	    errorMsg: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ProxyValidationResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.supported = source["supported"];
@@ -119,11 +318,11 @@ export namespace backend {
 	    sizeMB: number;
 	    createdAt: string;
 	    filePath?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SnapshotInfo(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.snapshotId = source["snapshotId"];
@@ -138,7 +337,7 @@ export namespace backend {
 }
 
 export namespace backup {
-	
+
 	export class ManifestEntry {
 	    id: string;
 	    category: string;
@@ -146,11 +345,11 @@ export namespace backup {
 	    required: boolean;
 	    archivePath: string;
 	    description?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ManifestEntry(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -164,11 +363,11 @@ export namespace backup {
 	export class ManifestAppInfo {
 	    name: string;
 	    version: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ManifestAppInfo(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -181,11 +380,11 @@ export namespace backup {
 	    createdAt: string;
 	    app: ManifestAppInfo;
 	    entries: ManifestEntry[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Manifest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.format = source["format"];
@@ -194,7 +393,7 @@ export namespace backup {
 	        this.app = this.convertValues(source["app"], ManifestAppInfo);
 	        this.entries = this.convertValues(source["entries"], ManifestEntry);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -213,8 +412,8 @@ export namespace backup {
 		    return a;
 		}
 	}
-	
-	
+
+
 	export class ScopeEntry {
 	    id: string;
 	    category: string;
@@ -224,11 +423,11 @@ export namespace backup {
 	    archivePath: string;
 	    exists: boolean;
 	    description?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ScopeEntry(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -246,11 +445,11 @@ export namespace backup {
 	    manifestVersion: number;
 	    appRoot: string;
 	    entries: ScopeEntry[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Scope(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.format = source["format"];
@@ -258,7 +457,7 @@ export namespace backup {
 	        this.appRoot = source["appRoot"];
 	        this.entries = this.convertValues(source["entries"], ScopeEntry);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -281,16 +480,16 @@ export namespace backup {
 }
 
 export namespace browser {
-	
+
 	export class CoreExtendedInfo {
 	    coreId: string;
 	    chromeVersion: string;
 	    instanceCount: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CoreExtendedInfo(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.coreId = source["coreId"];
@@ -303,11 +502,11 @@ export namespace browser {
 	    coreName: string;
 	    corePath: string;
 	    isDefault: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CoreInput(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.coreId = source["coreId"];
@@ -319,11 +518,11 @@ export namespace browser {
 	export class CoreValidateResult {
 	    valid: boolean;
 	    message: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CoreValidateResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.valid = source["valid"];
@@ -337,11 +536,11 @@ export namespace browser {
 	    sortOrder: number;
 	    createdAt: string;
 	    updatedAt: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Group(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.groupId = source["groupId"];
@@ -356,11 +555,11 @@ export namespace browser {
 	    groupName: string;
 	    parentId: string;
 	    sortOrder: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new GroupInput(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.groupName = source["groupName"];
@@ -376,11 +575,11 @@ export namespace browser {
 	    createdAt: string;
 	    updatedAt: string;
 	    instanceCount: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new GroupWithCount(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.groupId = source["groupId"];
@@ -419,11 +618,11 @@ export namespace browser {
 	    updatedAt: string;
 	    lastStartAt: string;
 	    lastStopAt: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Profile(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.profileId = source["profileId"];
@@ -465,11 +664,11 @@ export namespace browser {
 	    tags: string[];
 	    keywords: string[];
 	    groupId: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ProfileInput(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.profileName = source["profileName"];
@@ -488,20 +687,22 @@ export namespace browser {
 	    userDataRoot: string;
 	    defaultFingerprintArgs: string[];
 	    defaultLaunchArgs: string[];
-	    defaultProxy: string;
+	    defaultStartUrls: string[];
+	    restoreLastSession: boolean;
 	    startReadyTimeoutMs: number;
 	    startStableWindowMs: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.userDataRoot = source["userDataRoot"];
 	        this.defaultFingerprintArgs = source["defaultFingerprintArgs"];
 	        this.defaultLaunchArgs = source["defaultLaunchArgs"];
-	        this.defaultProxy = source["defaultProxy"];
+	        this.defaultStartUrls = source["defaultStartUrls"];
+	        this.restoreLastSession = source["restoreLastSession"];
 	        this.startReadyTimeoutMs = source["startReadyTimeoutMs"];
 	        this.startStableWindowMs = source["startStableWindowMs"];
 	    }
@@ -511,11 +712,11 @@ export namespace browser {
 	    title: string;
 	    url: string;
 	    active: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Tab(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.tabId = source["tabId"];
@@ -528,15 +729,15 @@ export namespace browser {
 }
 
 export namespace config {
-	
+
 	export class BrowserBookmark {
 	    name: string;
 	    url: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new BrowserBookmark(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -548,11 +749,11 @@ export namespace config {
 	    coreName: string;
 	    corePath: string;
 	    isDefault: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new BrowserCore(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.coreId = source["coreId"];
@@ -578,11 +779,11 @@ export namespace config {
 	    lastTestOk: boolean;
 	    lastTestedAt: string;
 	    lastIPHealthJson?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new BrowserProxy(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.proxyId = source["proxyId"];
@@ -607,16 +808,16 @@ export namespace config {
 }
 
 export namespace launchcode {
-	
+
 	export class LaunchRequestParams {
 	    launchArgs: string[];
 	    startUrls: string[];
 	    skipDefaultStartUrls: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new LaunchRequestParams(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.launchArgs = source["launchArgs"];
@@ -628,18 +829,18 @@ export namespace launchcode {
 }
 
 export namespace logger {
-	
+
 	export class MemoryLogEntry {
 	    time: string;
 	    level: string;
 	    component: string;
 	    message: string;
 	    fields?: Record<string, any>;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new MemoryLogEntry(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.time = source["time"];
@@ -650,17 +851,16 @@ export namespace logger {
 	    }
 	}
 	export class MethodInterceptor {
-	
-	
+
+
 	    static createFrom(source: any = {}) {
 	        return new MethodInterceptor(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	
+
 	    }
 	}
 
 }
-

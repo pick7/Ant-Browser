@@ -182,7 +182,7 @@ if [[ "$SKIP_BUILD" -ne 1 ]]; then
   (cd "$ROOT_DIR/frontend" && BROWSERSLIST_IGNORE_OLD_DATA=1 npm ci --prefer-offline --no-audit --no-fund)
 
   echo "[2/5] Building frontend assets..."
-  (cd "$ROOT_DIR/frontend" && BROWSERSLIST_IGNORE_OLD_DATA=1 npm run build)
+  (cd "$ROOT_DIR/frontend" && BROWSERSLIST_IGNORE_OLD_DATA=1 npm run build:clean)
 
   echo "[3/5] Building app binary with Wails..."
   rm -f "$APP_BIN"

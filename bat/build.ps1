@@ -115,7 +115,7 @@ try {
     }
     Push-Location (Join-Path $repoRoot "frontend")
     try {
-        Invoke-NativeCommand -FilePath "npm" -Arguments @("run", "build")
+        Invoke-NativeCommand -FilePath "npm" -Arguments @("run", "build:clean")
     }
     finally {
         Pop-Location

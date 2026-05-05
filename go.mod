@@ -4,10 +4,12 @@ go 1.22.0
 
 require (
 	github.com/energye/systray v1.0.3
+	github.com/evanw/esbuild v0.21.5
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/leanovate/gopter v0.2.11
 	github.com/metacubex/mihomo v1.19.20
+	github.com/ulikunitz/xz v0.5.15
 	github.com/wailsapp/wails/v2 v2.12.0
 	golang.org/x/net v0.35.0
 	golang.org/x/sys v0.30.0
@@ -17,7 +19,6 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
-	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
 	github.com/RyuaNerin/go-krypto v1.3.0 // indirect
 	github.com/Yawning/aez v0.0.0-20211027044916-e49e68abd344 // indirect
 	github.com/andybalholm/brotli v1.0.6 // indirect

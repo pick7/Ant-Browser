@@ -88,10 +88,10 @@ export function BookmarkSettingsPage() {
               onDragStart={() => handleDragStart(index)}
               onDragOver={e => handleDragOver(e, index)}
               onDragEnd={handleDragEnd}
-              className={`flex items-center gap-2 p-2 rounded-lg border transition-colors ${
+              className={`flex items-center gap-2 p-2.5 rounded-xl shadow-[var(--shadow-sm)] transition-all duration-150 ${
                 dragIndex === index
-                  ? 'border-[var(--color-primary)] bg-[var(--color-bg-hover)]'
-                  : 'border-[var(--color-border)] hover:border-[var(--color-border-hover)]'
+                  ? 'bg-[var(--color-accent-muted)] ring-1 ring-[var(--color-border-strong)]'
+                  : 'bg-[var(--color-bg-muted)] hover:bg-[var(--color-bg-subtle)]'
               }`}
             >
               <GripVertical className="w-4 h-4 text-[var(--color-text-muted)] cursor-grab shrink-0" />
@@ -127,7 +127,7 @@ export function BookmarkSettingsPage() {
         <button
           type="button"
           onClick={handleAdd}
-          className="mt-3 w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-dashed border-[var(--color-border)] text-sm text-[var(--color-text-muted)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] transition-colors"
+          className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[var(--color-bg-muted)] text-sm text-[var(--color-text-primary)] shadow-[var(--shadow-sm)] hover:bg-[var(--color-bg-subtle)] transition-colors"
         >
           <Plus className="w-4 h-4" />
           添加书签

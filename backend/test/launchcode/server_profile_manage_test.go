@@ -197,6 +197,47 @@ func TestUpdateProfileAPIUpdatesFieldsAndAutoLaunches(t *testing.T) {
 	}
 }
 
+func TestUpdateProfileAPIRejectsMissingProxyIDWithoutProxyConfig(t *testing.T) {
+	svc := newInMemoryService()
+	mgr := newProfileCreateTestManager(t, func(cfg *config.Config) {
+		cfg.Browser.Proxies = []config.BrowserProxy{
+			{ProxyId: "proxy-us", ProxyName: "US Residential", ProxyConfig: "socks5://127.0.0.1:1080"},
+		}
+	})
+	starter := &managerBackedStarter{mgr: mgr}
+	handler := buildTestHandlerWithManager(svc, starter, mgr)
+
+	profile, err := mgr.Create(browser.ProfileInput{
+		ProfileName: "buyer-old",
+		ProxyId:     "proxy-us",
+	})
+	if err != nil {
+		t.Fatalf("创建测试实例失败: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPut, "/api/profiles/"+profile.ProfileId, bytes.NewBufferString(`{
+		"profile": {
+			"profileName": "buyer-new",
+			"proxyId": "missing-proxy-id"
+		}
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("期望 400，实际 %d，body=%s", w.Code, w.Body.String())
+	}
+
+	current, status, errMsg := handlerProfileSnapshot(t, mgr, svc, profile.ProfileId)
+	if errMsg != "" || status != http.StatusOK {
+		t.Fatalf("读取实例失败: status=%d err=%s", status, errMsg)
+	}
+	if current.ProfileName != "buyer-old" || current.ProxyId != "proxy-us" || current.ProxyConfig != "socks5://127.0.0.1:1080" {
+		t.Fatalf("失败请求不应污染原配置: %+v", current)
+	}
+}
+
 func TestUpdateProfileAPIRollsBackOnDuplicateLaunchCode(t *testing.T) {
 	svc := newInMemoryService()
 	mgr := newProfileCreateTestManager(t, nil)

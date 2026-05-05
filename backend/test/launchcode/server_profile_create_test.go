@@ -212,6 +212,31 @@ func TestCreateProfileAPIRejectsMissingProfile(t *testing.T) {
 	}
 }
 
+func TestCreateProfileAPIRejectsMissingProxyIDWithoutProxyConfig(t *testing.T) {
+	svc := newInMemoryService()
+	mgr := newProfileCreateTestManager(t, func(cfg *config.Config) {
+		cfg.Browser.Proxies = []config.BrowserProxy{
+			{ProxyId: "proxy-us", ProxyName: "US Residential", ProxyConfig: "socks5://127.0.0.1:1080"},
+		}
+	})
+	starter := &managerBackedStarter{mgr: mgr}
+	handler := buildTestHandlerWithManager(svc, starter, mgr)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/profiles", bytes.NewBufferString(`{
+		"profile": {
+			"profileName": "buyer-003",
+			"proxyId": "missing-proxy-id"
+		}
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("期望 400，实际 %d，body=%s", w.Code, w.Body.String())
+	}
+}
+
 func TestCreateProfileAPIRollsBackOnDuplicateLaunchCode(t *testing.T) {
 	svc := newInMemoryService()
 	mgr := newProfileCreateTestManager(t, nil)

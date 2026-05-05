@@ -4,6 +4,7 @@ import (
 	"ant-chrome/backend/internal/browser"
 	"ant-chrome/backend/internal/launchcode"
 	"fmt"
+	"time"
 )
 
 // StartInstance 实现 launchcode.BrowserStarter 接口
@@ -14,6 +15,38 @@ func (a *App) StartInstance(profileId string) (*browser.Profile, error) {
 // StartInstanceWithParams 实现 launchcode.BrowserStarterWithParams 接口
 func (a *App) StartInstanceWithParams(profileId string, params launchcode.LaunchRequestParams) (*browser.Profile, error) {
 	return a.BrowserInstanceStartWithParams(profileId, params.LaunchArgs, params.StartURLs, params.SkipDefaultStartURLs)
+}
+
+// StatusInstance 实现 launchcode.BrowserStatusProvider 接口
+func (a *App) StatusInstance(profileId string) (*browser.Profile, error) {
+	return a.BrowserInstanceStatus(profileId)
+}
+
+// StopInstance 实现 launchcode.BrowserStopper 接口
+func (a *App) StopInstance(profileId string) (*browser.Profile, error) {
+	return a.BrowserInstanceStop(profileId)
+}
+
+// WaitInstanceDebugReady 实现 launchcode.BrowserDebugWaiter 接口
+func (a *App) WaitInstanceDebugReady(profileId string, debugPort int, timeout time.Duration) (*browser.Profile, bool, error) {
+	if timeout <= 0 {
+		profile, err := a.BrowserInstanceStatus(profileId)
+		if err != nil {
+			return nil, false, err
+		}
+		return profile, profile != nil && profile.DebugReady, nil
+	}
+
+	snapshot, _ := a.waitForBrowserDebugReady(profileId, debugPort, timeout)
+	if snapshot != nil {
+		return snapshot, snapshot.DebugReady, nil
+	}
+
+	profile, err := a.BrowserInstanceStatus(profileId)
+	if err != nil {
+		return nil, false, err
+	}
+	return profile, profile != nil && profile.DebugReady, nil
 }
 
 // BrowserProfileGetCode 获取实例的 LaunchCode（Wails 绑定）
@@ -94,11 +127,16 @@ func (a *App) GetLaunchServerInfo() map[string]interface{} {
 		info["cdpUrl"] = fmt.Sprintf("http://127.0.0.1:%d", actualPort)
 		if a.launchServer != nil {
 			info["activeDebugPort"] = a.launchServer.ActiveDebugPort()
+			activeProfileID, activeProfileName, _ := a.launchServer.ActiveProfile()
+			info["activeProfileId"] = activeProfileID
+			info["activeProfileName"] = activeProfileName
 		}
 	} else {
 		info["baseUrl"] = ""
 		info["cdpUrl"] = ""
 		info["activeDebugPort"] = 0
+		info["activeProfileId"] = ""
+		info["activeProfileName"] = ""
 	}
 	return info
 }
@@ -106,3 +144,10 @@ func (a *App) GetLaunchServerInfo() map[string]interface{} {
 // 确保编译器检查 App 实现了 BrowserStarter 接口
 var _ launchcode.BrowserStarter = (*App)(nil)
 var _ launchcode.BrowserStarterWithParams = (*App)(nil)
+var _ launchcode.BrowserStatusProvider = (*App)(nil)
+var _ launchcode.BrowserStopper = (*App)(nil)
+var _ launchcode.BrowserDebugWaiter = (*App)(nil)
+var _ launchcode.AutomationScriptLister = (*App)(nil)
+var _ launchcode.AutomationScriptGetter = (*App)(nil)
+var _ launchcode.AutomationScriptRunner = (*App)(nil)
+var _ launchcode.AutomationScriptRunLister = (*App)(nil)
